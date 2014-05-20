@@ -17,15 +17,6 @@ import com.twitter.hadoop.isolated.IsolatedInputFormat;
 
 public class IsolatedJob {
 
-  public static class MyMapper extends Mapper<Object, Object, String, String> {
-    @Override
-    protected void map(Object key, Object value,
-        Mapper<Object, Object, String, String>.Context context)
-        throws IOException, InterruptedException {
-      super.map(String.valueOf(key), String.valueOf(value), context);
-    }
-  }
-
   public static void main(String[] args) throws Exception {
     Properties properties = new Properties();
     properties.load(new FileInputStream(new File(args[0])));
@@ -40,7 +31,7 @@ public class IsolatedJob {
     job.setInputFormatClass(IsolatedInputFormat.class);
     job.setNumReduceTasks(0);
     job.setOutputFormatClass(TextOutputFormat.class);
-    job.setMapperClass(MyMapper.class);
+    job.setMapperClass(Mapper.class);
     job.submit();
     System.out.println("job id = " + job.getJobID());
     System.out.println("URL: " + job.getTrackingURL());

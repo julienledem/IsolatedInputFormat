@@ -160,7 +160,9 @@ public class IsolatedInputFormat<K, V> extends InputFormat<K, V> {
     Configuration conf = job.getConfiguration();
     for (InputFormatDefinition ifDef : inputFormats) {
       conf.set(key("inputformat", ifDef.getName(), "class"), ifDef.getInputFormatClassName());
-      conf.set(key("inputformat", ifDef.getName(), "library"), ifDef.getLibraryName());
+      if (ifDef.getLibraryName() != null) {
+        conf.set(key("inputformat", ifDef.getName(), "library"), ifDef.getLibraryName());
+      }
       setConf(conf, key("inputformat", ifDef.getName()), ifDef.getConf());
     }
   }

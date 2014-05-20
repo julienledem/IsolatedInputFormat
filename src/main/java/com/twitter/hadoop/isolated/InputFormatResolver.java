@@ -121,7 +121,8 @@ class InputFormatResolver<K, V> {
   private static ClassLoader getClassLoader(Library lib) {
     ClassLoader classLoader = classLoaderByLib.get(lib);
     if (classLoader == null) {
-      classLoader = new IsolatedClassLoader(lib, InputFormatResolver.class.getClassLoader());
+      ClassLoader parent = InputFormatResolver.class.getClassLoader();
+      classLoader = lib == null ? parent : new IsolatedClassLoader(lib, parent);
       classLoaderByLib.put(lib, classLoader);
     }
     return classLoader;
@@ -159,7 +160,7 @@ class InputFormatResolver<K, V> {
     }
     for (InputFormatDefinition inputFormatDef : inputFormatDefinitions) {
       inputFormatDefByName.put(inputFormatDef.getName(), inputFormatDef);
-      Library library = lookup(libByName, inputFormatDef.getLibraryName());
+      Library library = inputFormatDef.getLibraryName() == null ? null : lookup(libByName, inputFormatDef.getLibraryName());
       ClassLoader classLoader = getClassLoader(library);
       classLoaderByInputFormatName.put(inputFormatDef.getName(), classLoader);
       try {

@@ -1,18 +1,10 @@
 package com.twitter.hadoop.isolated;
 
-import static com.twitter.hadoop.isolated.IsolatedInputFormat.inputFormatDefinitionsFromConf;
-import static com.twitter.hadoop.isolated.IsolatedInputFormat.inputSpecsFromConf;
-import static com.twitter.hadoop.isolated.IsolatedInputFormat.librariesFromConf;
-import static com.twitter.hadoop.isolated.IsolatedInputFormat.setInputFormats;
-import static com.twitter.hadoop.isolated.IsolatedInputFormat.setInputSpecs;
-import static com.twitter.hadoop.isolated.IsolatedInputFormat.setLibraries;
 import static java.lang.Thread.sleep;
 import static java.util.Arrays.asList;
-import static org.junit.Assert.assertEquals;
 
 import java.io.FileInputStream;
 import java.io.IOException;
-import java.util.List;
 import java.util.Map.Entry;
 
 import org.apache.hadoop.conf.Configuration;
@@ -28,7 +20,6 @@ import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
 import org.junit.After;
-import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -93,15 +84,14 @@ public class TestIsolatedInputFormat {
     IsolatedInputFormat.setLibraries(
         job,
         asList(
-            new Library("parquet-lib", parquetJar),
-            new Library("hadoop-lib") // empty
+            new Library("parquet-lib", parquetJar)
             )
         );
     IsolatedInputFormat.setInputFormats(
         job,
         asList(
             new InputFormatDefinition("parquet-inputformat", "parquet-lib", "parquet.hadoop.ParquetInputFormat", "parquet.read.support.class=parquet.hadoop.example.GroupReadSupport"),
-            new InputFormatDefinition("text-inputformat", "hadoop-lib", "org.apache.hadoop.mapreduce.lib.input.TextInputFormat")
+            new InputFormatDefinition("text-inputformat", null, "org.apache.hadoop.mapreduce.lib.input.TextInputFormat")
             )
         );
     IsolatedInputFormat.setInputSpecs(
