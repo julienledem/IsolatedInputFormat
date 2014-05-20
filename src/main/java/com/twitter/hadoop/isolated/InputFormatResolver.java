@@ -1,6 +1,5 @@
 package com.twitter.hadoop.isolated;
 
-import java.io.DataInput;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -83,7 +82,7 @@ class InputFormatResolver<K, V> {
     }
   }
 
-  private final class IsolatedClassLoader extends URLClassLoader {
+  private static final class IsolatedClassLoader extends URLClassLoader {
     private IsolatedClassLoader(Library lib, ClassLoader parent) {
       super(toURLs(lib.getJars()), parent);
     }
@@ -111,29 +110,21 @@ class InputFormatResolver<K, V> {
     }
   }
 
-  private static Map<String, ClassLoader> classLoaderByLibName = new HashMap<String, ClassLoader>();
-  private Map<String, Class<InputFormat<K, V>>> inputFormatByName = new HashMap<String, Class<InputFormat<K, V>>>();
-  private Map<String, InputFormatDefinition> inputFormatDefByName = new HashMap<String, InputFormatDefinition>();
+  private static Map<Library, ClassLoader> classLoaderByLib = new HashMap<Library, ClassLoader>();
 
-  InputFormatResolver(List<Library> libraries, List<InputFormatDefinition> inputFormatDefinitions) {
-    for (Library library : libraries) {
-      if (!classLoaderByLibName.containsKey(library.getName())) {
-        classLoaderByLibName.put(library.getName(), createClassLoader(library));
-      }
+  /**
+   * ensures we always return the same class loader for the same library definition
+   * otherwise you can get "Foo can not be cast to Foo" errors
+   * @param lib the lib definition
+   * @return the corresponding classloader
+   */
+  private static ClassLoader getClassLoader(Library lib) {
+    ClassLoader classLoader = classLoaderByLib.get(lib);
+    if (classLoader == null) {
+      classLoader = new IsolatedClassLoader(lib, InputFormatResolver.class.getClassLoader());
+      classLoaderByLib.put(lib, classLoader);
     }
-    for (InputFormatDefinition inputFormatDef : inputFormatDefinitions) {
-      inputFormatDefByName.put(inputFormatDef.getName(), inputFormatDef);
-      try {
-        @SuppressWarnings("unchecked")
-        Class<InputFormat<K, V>> inputFormatClass = (Class<InputFormat<K, V>>)
-          classLoaderByLibName.get(inputFormatDef.getLibraryName())
-            .loadClass(inputFormatDef.getInputFormatClassName())
-            .asSubclass(InputFormat.class);
-        inputFormatByName.put(inputFormatDef.getName(), inputFormatClass);
-      } catch (ClassNotFoundException e) {
-        throw new RuntimeException("InputFormat not found " + inputFormatDef.getInputFormatClassName() + " in lib " + inputFormatDef.getLibraryName(), e);
-      }
-    }
+    return classLoader;
   }
 
   static Configuration newConf(Configuration conf, InputSpec inputSpec, InputFormatDefinition inputFormatDefinition) {
@@ -149,9 +140,44 @@ class InputFormatResolver<K, V> {
     }
   }
 
+  private static <T> T lookup(Map<String, T> map, String key) {
+    T lookedUp = map.get(key);
+    if (lookedUp == null) {
+      throw new IllegalArgumentException(key + " not found in " + map.keySet());
+    }
+    return lookedUp;
+  }
+
+  private Map<String, Library> libByName = new HashMap<String, Library>();
+  private Map<String, InputFormatDefinition> inputFormatDefByName = new HashMap<String, InputFormatDefinition>();
+  private Map<String, Class<InputFormat<K, V>>> inputFormatByName = new HashMap<String, Class<InputFormat<K, V>>>();
+  private Map<String, ClassLoader> classLoaderByInputFormatName = new HashMap<String, ClassLoader>();
+
+  InputFormatResolver(List<Library> libraries, List<InputFormatDefinition> inputFormatDefinitions) {
+    for (Library library : libraries) {
+      libByName.put(library.getName(), library);
+    }
+    for (InputFormatDefinition inputFormatDef : inputFormatDefinitions) {
+      inputFormatDefByName.put(inputFormatDef.getName(), inputFormatDef);
+      Library library = lookup(libByName, inputFormatDef.getLibraryName());
+      ClassLoader classLoader = getClassLoader(library);
+      classLoaderByInputFormatName.put(inputFormatDef.getName(), classLoader);
+      try {
+        @SuppressWarnings("unchecked")
+        Class<InputFormat<K, V>> inputFormatClass = (Class<InputFormat<K, V>>)
+          classLoader
+            .loadClass(inputFormatDef.getInputFormatClassName())
+            .asSubclass(InputFormat.class);
+        inputFormatByName.put(inputFormatDef.getName(), inputFormatClass);
+      } catch (ClassNotFoundException e) {
+        throw new RuntimeException("InputFormat not found " + inputFormatDef.getInputFormatClassName() + " in lib " + inputFormatDef.getLibraryName(), e);
+      }
+    }
+  }
+
   private InputFormat<K, V> newInputFormat(String inputFormatName) {
     try {
-      return inputFormatByName.get(inputFormatName).newInstance();
+      return lookup(inputFormatByName, inputFormatName).newInstance();
     } catch (InstantiationException e) {
       throw new RuntimeException(e);
     } catch (IllegalAccessException e) {
@@ -159,59 +185,82 @@ class InputFormatResolver<K, V> {
     }
   }
 
-  private ClassLoader createClassLoader(Library lib) {
-    return new IsolatedClassLoader(lib, this.getClass().getClassLoader());
+  private static interface ContextualCall<T> {
+    T call(Configuration conf) throws IOException, InterruptedException;
   }
 
-  List<InputSplit> getSplits(List<InputSpec> inputSpecs, JobContext context)
-      throws IOException, InterruptedException {
-    ClassLoader contextClassLoader = Thread.currentThread().getContextClassLoader();
+  private static interface ContextualRun {
+    void run(Configuration conf) throws IOException, InterruptedException;
+  }
+
+  private void runInContext(Configuration conf, InputSpec inputSpec, final ContextualRun runable) throws IOException {
+    callInContext(conf, inputSpec, new ContextualCall<Void>() {
+      @Override
+      public Void call(Configuration conf) throws IOException, InterruptedException {
+        runable.run(conf);
+        return null;
+      }
+    });
+  }
+
+  private <T> T callInContext(Configuration conf, InputSpec inputSpec, ContextualCall<T> callable) throws IOException {
+    Thread currentThread = Thread.currentThread();
+    ClassLoader contextClassLoader = currentThread.getContextClassLoader();
     try {
-      List<InputSplit> finalSplits = new ArrayList<InputSplit>();
-      for (InputSpec inputSpec : inputSpecs) {
-        InputFormatDefinition inputFormatDefinition = inputFormatDefByName.get(inputSpec.getInputFormatName());
-        InputFormat<K, V> inputFormat = newInputFormat(inputSpec.getInputFormatName());
-        Thread.currentThread().setContextClassLoader(inputFormat.getClass().getClassLoader());
-        Configuration newConf = newConf(context.getConfiguration(), inputSpec, inputFormatDefinition);
-        List<InputSplit> splits = inputFormat.getSplits(new JobContext(newConf, context.getJobID()));
-        for (InputSplit inputSplit : splits) {
-          finalSplits.add(new IsolatedInputSplit(inputSpec, inputSplit, newConf));
+      InputFormatDefinition inputFormatDefinition = lookup(inputFormatDefByName, inputSpec.getInputFormatName());
+      currentThread.setContextClassLoader(lookup(classLoaderByInputFormatName, inputSpec.getInputFormatName()));
+      Configuration newConf = newConf(conf, inputSpec, inputFormatDefinition);
+      return callable.call(newConf);
+    } catch (InterruptedException e) {
+      throw new IOException("thread interrupted", e);
+    } finally {
+      currentThread.setContextClassLoader(contextClassLoader);
+    }
+  }
+
+  List<InputSplit> getSplits(List<InputSpec> inputSpecs, final JobContext context)
+      throws IOException, InterruptedException {
+    final List<InputSplit> finalSplits = new ArrayList<InputSplit>();
+    for (final InputSpec inputSpec : inputSpecs) {
+      runInContext(context.getConfiguration(), inputSpec, new ContextualRun() {
+        public void run(Configuration conf) throws IOException, InterruptedException {
+          InputFormat<K, V> inputFormat = newInputFormat(inputSpec.getInputFormatName());
+          List<InputSplit> splits = inputFormat.getSplits(new JobContext(conf, context.getJobID()));
+          for (InputSplit inputSplit : splits) {
+            finalSplits.add(new IsolatedInputSplit(inputSpec, inputSplit, conf));
+          }
+        }
+      });
+    }
+    return finalSplits;
+  }
+
+  RecordReader<K, V> createRecordReader(final IsolatedInputSplit split, final TaskAttemptContext context)
+      throws IOException, InterruptedException {
+    return callInContext(context.getConfiguration(), split.getInputSpec(), new ContextualCall<RecordReader<K, V>>() {
+      public RecordReader<K, V> call(Configuration conf) throws IOException,
+          InterruptedException {
+        InputFormat<K, V> inputFormat = newInputFormat(split.getInputSpec().getInputFormatName());
+        return inputFormat.createRecordReader(split.getDelegate(), new TaskAttemptContext(conf, context.getTaskAttemptID()));
+      }
+    });
+  }
+
+  <T extends InputSplit> T deserializeSplit(final InputStream in, InputSpec inputSpec, final String name, Configuration configuration) throws IOException {
+    return callInContext(configuration, inputSpec, new ContextualCall<T>() {
+      public T call(Configuration conf) throws IOException,
+          InterruptedException {
+        try {
+          Class<T> splitClass = (Class<T>)conf.getClassByName(name).asSubclass(InputSplit.class);
+          T delegateInstance = ReflectionUtils.newInstance(splitClass, conf);
+          SerializationFactory factory = new SerializationFactory(conf);
+          Deserializer<T> deserializer = factory.getDeserializer(splitClass);
+          deserializer.open(in);
+          return deserializer.deserialize(delegateInstance);
+        } catch (ClassNotFoundException e) {
+          throw new IOException("could not resolve class " + name, e);
         }
       }
-      return finalSplits;
-    } finally {
-      Thread.currentThread().setContextClassLoader(contextClassLoader);
-    }
-  }
-
-  RecordReader<K, V> createRecordReader(IsolatedInputSplit split, TaskAttemptContext context)
-      throws IOException, InterruptedException {
-    ClassLoader contextClassLoader = Thread.currentThread().getContextClassLoader();
-    try {
-      InputFormat<K, V> inputFormat = newInputFormat(split.getInputSpec().getInputFormatName());
-      Thread.currentThread().setContextClassLoader(inputFormat.getClass().getClassLoader());
-      Configuration newConf = newConf(context.getConfiguration(), split.getInputSpec(), inputFormatDefByName.get(split.getInputSpec().getInputFormatName()));
-      return inputFormat.createRecordReader(split.getDelegate(), new TaskAttemptContext(newConf, context.getTaskAttemptID()));
-    } finally {
-      Thread.currentThread().setContextClassLoader(contextClassLoader);
-    }
-  }
-
-  <T extends InputSplit> T deserializeSplit(InputStream in, InputSpec inputSpec, String name, Configuration configuration) throws IOException {
-    ClassLoader contextClassLoader = Thread.currentThread().getContextClassLoader();
-    try {
-      Thread.currentThread().setContextClassLoader(classLoaderByLibName.get(inputFormatDefByName.get(inputSpec.getInputFormatName()).getLibraryName()));
-      Configuration newConf = newConf(configuration, inputSpec, inputFormatDefByName.get(inputSpec.getInputFormatName()));
-      Class<T> splitClass = (Class<T>)newConf.getClassByName(name).asSubclass(InputSplit.class);
-      T delegateInstance = ReflectionUtils.newInstance(splitClass, newConf);
-      SerializationFactory factory = new SerializationFactory(newConf);
-      Deserializer<T> deserializer = factory.getDeserializer(splitClass);
-      deserializer.open(in);
-      return deserializer.deserialize(delegateInstance);
-    } catch (ClassNotFoundException e) {
-      throw new IOException("could not resolve class " + name, e);
-    } finally {
-      Thread.currentThread().setContextClassLoader(contextClassLoader);
-    }
+    });
   }
 }

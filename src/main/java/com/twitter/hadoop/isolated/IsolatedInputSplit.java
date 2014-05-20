@@ -53,11 +53,6 @@ public class IsolatedInputSplit extends InputSplit implements Writable, Configur
       conf.put(in.readUTF(), in.readUTF());
     }
     this.inputSpec = new InputSpec(inputFormatName, conf);
-    System.out.println("&&&&&&&&&&&&&&&&&&&&&&&&&&");
-    System.out.println("&&&&&&&&&&&&&&&&&&&&&&&&&&");
-    System.out.println(configuration);
-    System.out.println("&&&&&&&&&&&&&&&&&&&&&&&&&&");
-    System.out.println("&&&&&&&&&&&&&&&&&&&&&&&&&&");
     this.delegate = deserialize(in, in.readUTF());
   }
 

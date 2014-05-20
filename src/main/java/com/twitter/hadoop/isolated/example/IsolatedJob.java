@@ -50,7 +50,7 @@ public class IsolatedJob {
 
   private static void waitForJob(Job job) throws InterruptedException, IOException {
     while (!job.isComplete()) {
-      System.out.println("waiting for job " + job.getJobName());
+      System.out.println("waiting for job " + job.getJobName() + " " + (int)(job.mapProgress() * 100) + "%");
       sleep(100);
     }
     System.out.println("status for job " + job.getJobName() + ": " + (job.isSuccessful() ? "SUCCESS" : "FAILURE"));

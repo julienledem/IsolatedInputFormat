@@ -3,12 +3,13 @@ package com.twitter.hadoop.isolated;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Set;
+import java.util.TreeMap;
 
-import org.apache.hadoop.conf.Configurable;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.mapreduce.InputFormat;
@@ -65,6 +66,37 @@ public class IsolatedInputFormat<K, V> extends InputFormat<K, V> {
     return resolverFromConf(context).getSplits(inputSpecsFromConf(context.getConfiguration()), context);
   }
 
+  private static String key(String... values) {
+    StringBuilder sb = new StringBuilder("com.twitter.isolated");
+    for (String value : values) {
+      sb.append(".").append(value);
+    }
+    return sb.toString();
+  }
+
+  private static Collection<String> getEntries(Configuration conf, String key) {
+    Set<String> result = new HashSet<String>();
+    for (String property : getEntriesFull(conf, key)) {
+      int nextDot = property.indexOf('.');
+      if (nextDot != -1) {
+        result.add(property.substring(0, nextDot));
+      }
+    }
+    return result;
+  }
+
+  private static Collection<String> getEntriesFull(Configuration conf, String key) {
+    Set<String> result = new HashSet<String>();
+    String prefix = key + ".";
+    for (Entry<String, String> e : conf) {
+      String property = e.getKey();
+      if (property.startsWith(prefix)) {
+        result.add(property.substring(prefix.length()));
+      }
+    }
+    return result;
+  }
+
   static <K, V> InputFormatResolver<K, V> resolverFromConf(JobContext context) {
     return resolverFromConf(context.getConfiguration());
   }
@@ -73,13 +105,11 @@ public class IsolatedInputFormat<K, V> extends InputFormat<K, V> {
     return new InputFormatResolver<K, V>(librariesFromConf(conf), inputFormatDefinitionsFromConf(conf));
   }
 
-  private List<InputSpec> inputSpecsFromConf(Configuration conf) {
+  static List<InputSpec> inputSpecsFromConf(Configuration conf) {
     List<InputSpec> result = new ArrayList<InputSpec>();
-    int count = Integer.parseInt(conf.get(key("inputspecs")));
-    for (int i = 0; i< count; ++i) {
-      String id = String.valueOf(i);
-      String ifName = conf.get(key("inputspec", id, "inputformat"));
-      Map<String, String> specConf = getConf(conf, key("inputspec", id));
+    for (String spec : getEntries(conf, key("inputspec"))) {
+      String ifName = conf.get(key("inputspec", spec, "inputformat"));
+      Map<String, String> specConf = getConf(conf, key("inputspec", spec));
       result.add(new InputSpec(ifName, specConf));
     }
     return result;
@@ -87,14 +117,11 @@ public class IsolatedInputFormat<K, V> extends InputFormat<K, V> {
 
   static List<InputFormatDefinition> inputFormatDefinitionsFromConf(Configuration conf) {
     List<InputFormatDefinition> result = new ArrayList<InputFormatDefinition>();
-    String[] ifs = conf.get(key("inputformats")).split(" ");
-    for (String inputformat : ifs) {
-      if (inputformat.length() > 0) {
-        String className = conf.get(key("inputformat", inputformat, "class"));
-        String lib = conf.get(key("inputformat", inputformat, "library"));
-        Map<String, String> ifConf = getConf(conf, key("inputformat", inputformat));
-        result.add(new InputFormatDefinition(inputformat, lib, className, ifConf));
-      }
+    for (String inputformat : getEntries(conf, key("inputformat"))) {
+      String className = conf.get(key("inputformat", inputformat, "class"));
+      String lib = conf.get(key("inputformat", inputformat, "library"));
+      Map<String, String> ifConf = getConf(conf, key("inputformat", inputformat));
+      result.add(new InputFormatDefinition(inputformat, lib, className, ifConf));
     }
     return result;
   }
@@ -104,73 +131,50 @@ public class IsolatedInputFormat<K, V> extends InputFormat<K, V> {
       throw new NullPointerException("conf");
     }
     List<Library> result = new ArrayList<Library>();
-    String[] libs = conf.get(key("libraries")).split(" ");
-    for (String lib : libs) {
-      if (lib.length() > 0) {
-        String[] paths = conf.get(key("library", lib, "urls"), "").split(" ");
-        List<Path> jars = new ArrayList<Path>();
-        for (String p : paths) {
-          if (p.length() > 0) {
-              jars.add(new Path(p));
-          }
+    for (String lib : getEntries(conf, key("library"))) {
+      String[] paths = conf.get(key("library", lib, "paths"), "").split(" ");
+      List<Path> jars = new ArrayList<Path>();
+      for (String p : paths) {
+        if (p.length() > 0) {
+          jars.add(new Path(p));
         }
-        result.add(new Library(lib, jars));
       }
+      result.add(new Library(lib, jars));
     }
     return result;
   }
 
-  private static String key(String... values) {
-    StringBuilder sb = new StringBuilder("com.twitter.isolated");
-    for (String value : values) {
-      sb.append(".").append(value);
-    }
-    return sb.toString();
-  }
-
   public static void setLibraries(Job job, Collection<Library> libraries) {
     Configuration conf = job.getConfiguration();
-    String librariesString = "";
     for (Library library : libraries) {
-      librariesString += library.getName() + " ";
       List<Path> jars = library.getJars();
       String urlsString = "";
       for (Path p : jars) {
         urlsString += p.toString() + " ";
       }
-      conf.set(key("library", library.getName(), "urls"), urlsString);
+      conf.set(key("library", library.getName(), "paths"), urlsString);
     }
-    conf.set(key("libraries"), librariesString);
   }
 
   public static void setInputFormats(Job job, Collection<InputFormatDefinition> inputFormats) {
     Configuration conf = job.getConfiguration();
-    String ifsString = "";
     for (InputFormatDefinition ifDef : inputFormats) {
-      ifsString += ifDef.getName() + " ";
       conf.set(key("inputformat", ifDef.getName(), "class"), ifDef.getInputFormatClassName());
       conf.set(key("inputformat", ifDef.getName(), "library"), ifDef.getLibraryName());
       setConf(conf, key("inputformat", ifDef.getName()), ifDef.getConf());
     }
-    conf.set(key("inputformats"), ifsString);
   }
 
   private static void setConf(Configuration conf, String key, Map<String, String> m) {
-    String keys = "";
     for (Entry<String, String> e: m.entrySet()) {
       conf.set(key + ".conf." + e.getKey(), e.getValue());
-      keys += " " + e.getKey();
     }
-    conf.set(key + ".keys", keys);
   }
 
   private static Map<String, String> getConf(Configuration conf, String baseKey) {
-    Map<String, String> result = new HashMap<String, String>();
-    String[] keys = conf.get(baseKey + ".keys", "").split(" ");
-    for (String key : keys) {
-      if (key.length() > 0) {
-        result.put(key, conf.get(baseKey + ".conf." + key));
-      }
+    Map<String, String> result = new TreeMap<String, String>();
+    for (String key : getEntriesFull(conf, baseKey + ".conf")) {
+      result.put(key, conf.get(baseKey + ".conf." + key));
     }
     return result;
   }
@@ -184,7 +188,6 @@ public class IsolatedInputFormat<K, V> extends InputFormat<K, V> {
       setConf(conf, key("inputspec", inputSpecId), inputSpec.getConf());
       ++i;
     }
-    conf.set(key("inputspecs"), String.valueOf(i));
   }
 
 }

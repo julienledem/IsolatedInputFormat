@@ -1,12 +1,18 @@
 package com.twitter.hadoop.isolated;
 
+import static com.twitter.hadoop.isolated.IsolatedInputFormat.inputFormatDefinitionsFromConf;
+import static com.twitter.hadoop.isolated.IsolatedInputFormat.inputSpecsFromConf;
+import static com.twitter.hadoop.isolated.IsolatedInputFormat.librariesFromConf;
+import static com.twitter.hadoop.isolated.IsolatedInputFormat.setInputFormats;
+import static com.twitter.hadoop.isolated.IsolatedInputFormat.setInputSpecs;
+import static com.twitter.hadoop.isolated.IsolatedInputFormat.setLibraries;
 import static java.lang.Thread.sleep;
 import static java.util.Arrays.asList;
+import static org.junit.Assert.assertEquals;
 
 import java.io.FileInputStream;
 import java.io.IOException;
-import java.util.Collections;
-import java.util.HashMap;
+import java.util.List;
 import java.util.Map.Entry;
 
 import org.apache.hadoop.conf.Configuration;
@@ -22,6 +28,7 @@ import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
 import org.junit.After;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -64,25 +71,30 @@ public class TestIsolatedInputFormat {
     final Path in2 = new Path("target/testData/TestIsolatedInputFormat/in/text");
     Path out = new Path("target/testData/TestIsolatedInputFormat/out");
     fileSystem.delete(in, true);
+    fileSystem.delete(in2, true);
     fileSystem.delete(out, true);
+    // create Parquet input
     FSDataOutputStream input = fileSystem.create(in);
     IOUtils.copyBytes(this.getClass().getClassLoader().getResourceAsStream("part-m-00000.parquet"), input, conf);
+    // create text input
     FSDataOutputStream input2 = fileSystem.create(in2);
     input2.write("Foo".getBytes());
     input2.close();
 
+    // put parquet jar on HDFS
     Path parquetJar = fileSystem.makeQualified(new Path("/Users/julien/parquet-hadoop-bundle-1.4.2-SNAPSHOT.jar"));
     IOUtils.copyBytes(
         new FileInputStream("/Users/julien/.m2/repository/com/twitter/parquet-hadoop-bundle/1.4.2-SNAPSHOT/parquet-hadoop-bundle-1.4.2-SNAPSHOT.jar"),
         fileSystem.create(parquetJar),
         conf);
 
+    // configure job
     Job job = new Job(mrCluster.createJobConf());
     IsolatedInputFormat.setLibraries(
         job,
         asList(
-            new Library("parquet-lib", asList(parquetJar)),
-            new Library("hadoop-lib", Collections.<Path>emptyList())
+            new Library("parquet-lib", parquetJar),
+            new Library("hadoop-lib") // empty
             )
         );
     IsolatedInputFormat.setInputFormats(
@@ -114,15 +126,20 @@ public class TestIsolatedInputFormat {
     FileStatus[] list = fileSystem.listStatus(out);
     for (FileStatus fileStatus : list) {
       System.out.println(fileStatus.getPath());
-      FSDataInputStream o = fileSystem.open(fileStatus.getPath());
-      IOUtils.copyBytes(o, System.out, conf);
+    }
+    for (FileStatus fileStatus : list) {
+      if (!fileStatus.getPath().getName().startsWith("_")) {
+        System.out.println(fileStatus.getPath());
+        FSDataInputStream o = fileSystem.open(fileStatus.getPath());
+        IOUtils.copyBytes(o, System.out, 64000, false);
+        o.close();
+      }
     }
   }
 
-
   private void waitForJob(Job job) throws InterruptedException, IOException {
     while (!job.isComplete()) {
-      System.out.println("waiting for job " + job.getJobName());
+      System.out.println("waiting for job " + job.getJobName() + " " + (int)(job.mapProgress() * 100) + "%");
       sleep(100);
     }
     System.out.println("status for job " + job.getJobName() + ": " + (job.isSuccessful() ? "SUCCESS" : "FAILURE"));
