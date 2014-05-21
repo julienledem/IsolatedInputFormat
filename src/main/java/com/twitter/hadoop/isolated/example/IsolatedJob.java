@@ -22,16 +22,17 @@ public class IsolatedJob {
     properties.load(new FileInputStream(new File(args[0])));
     Configuration conf = new Configuration();
 
-    for (Entry<Object, Object> entry : properties.entrySet()) {
-      conf.set((String)entry.getKey(), (String)entry.getValue());
-    }
 
     Job job = new Job(conf, "example");
+    for (Entry<Object, Object> entry : properties.entrySet()) {
+      job.getConfiguration().set((String)entry.getKey(), (String)entry.getValue());
+    }
 
     job.setInputFormatClass(IsolatedInputFormat.class);
     job.setNumReduceTasks(0);
     job.setOutputFormatClass(TextOutputFormat.class);
     job.setMapperClass(Mapper.class);
+    job.setJarByClass(IsolatedJob.class);
     job.submit();
     System.out.println("job id = " + job.getJobID());
     System.out.println("URL: " + job.getTrackingURL());
