@@ -2,6 +2,7 @@ package com.twitter.hadoop.isolated;
 
 import static java.lang.Thread.sleep;
 import static java.util.Arrays.asList;
+import static org.junit.Assert.assertEquals;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -9,8 +10,6 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.URL;
 import java.util.Map.Entry;
-
-import junit.framework.Assert;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataInputStream;
@@ -167,7 +166,7 @@ public class TestIsolatedInputFormat {
 
   private void validate(InputStream s, String v) throws IOException {
     BufferedReader r = new BufferedReader(new InputStreamReader(s));
-    Assert.assertEquals("key:" + v + "\tvalue:" + v, r.readLine());
+    assertEquals("key:" + v + "\tvalue:" + v, r.readLine());
     r.close();
   }
 
