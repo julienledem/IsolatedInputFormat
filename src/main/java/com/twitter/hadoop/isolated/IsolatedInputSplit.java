@@ -63,6 +63,7 @@ public class IsolatedInputSplit extends InputSplit implements Writable, Configur
   }
 
   private <T> void serializeDelegate(OutputStream out, Class<T> delegateClass) throws IOException {
+    // TODO: this should happen in context of the classloader and conf
     SerializationFactory factory = new SerializationFactory(configuration);
     Serializer<T> serializer = factory.getSerializer(delegateClass);
     serializer.open(out);
