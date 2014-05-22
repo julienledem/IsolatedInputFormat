@@ -49,9 +49,8 @@ com.twitter.isolated.inputspec.{id}.conf.{key}={value}
 example:
 ```
 com.twitter.isolated.inputspec.0.inputformat=parquet-inputformat
-com.twitter.isolated.inputspec.0.conf.mapred.input.dir=/user/julien/client_event_2013_12_19_15.parquet
+com.twitter.isolated.inputspec.0.conf.mapred.input.dir=/user/julien/myfile.parquet
 
 com.twitter.isolated.inputspec.1.inputformat=text-inputformat
 com.twitter.isolated.inputspec.1.conf.mapred.input.dir=/user/julien/job_stats_by_day
-mapred.output.dir=example/out
 ```
