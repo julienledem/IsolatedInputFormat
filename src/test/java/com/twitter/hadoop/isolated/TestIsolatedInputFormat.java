@@ -3,9 +3,14 @@ package com.twitter.hadoop.isolated;
 import static java.lang.Thread.sleep;
 import static java.util.Arrays.asList;
 
-import java.io.FileInputStream;
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.net.URL;
 import java.util.Map.Entry;
+
+import junit.framework.Assert;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataInputStream;
@@ -56,7 +61,7 @@ public class TestIsolatedInputFormat {
   }
 
   @Test
-  public void test() throws Exception {
+  public void testClassLoaderIsolation() throws Exception {
     FileSystem fileSystem = getFileSystem();
     final Path in = new Path("target/testData/TestIsolatedInputFormat/in/parquet");
     final Path in2 = new Path("target/testData/TestIsolatedInputFormat/in/text");
@@ -73,9 +78,9 @@ public class TestIsolatedInputFormat {
     input2.close();
 
     // put parquet jar on HDFS
-    Path parquetJar = fileSystem.makeQualified(new Path("/Users/julien/parquet-hadoop-bundle-1.4.2-SNAPSHOT.jar"));
+    Path parquetJar = fileSystem.makeQualified(new Path("/Users/julien/parquet-hadoop-bundle.jar"));
     IOUtils.copyBytes(
-        new FileInputStream("/Users/julien/.m2/repository/com/twitter/parquet-hadoop-bundle/1.4.2-SNAPSHOT/parquet-hadoop-bundle-1.4.2-SNAPSHOT.jar"),
+        new URL("http://repo1.maven.org/maven2/com/twitter/parquet-hadoop-bundle/1.4.3/parquet-hadoop-bundle-1.4.3.jar").openStream(),
         fileSystem.create(parquetJar),
         conf);
 
@@ -97,8 +102,8 @@ public class TestIsolatedInputFormat {
     IsolatedInputFormat.setInputSpecs(
         job,
         asList(
-            new InputSpec("parquet-inputformat", "mapred.input.dir=" + in.toUri()),
-            new InputSpec("text-inputformat", "mapred.input.dir=" + in2.toUri())
+            new InputSpec("0", "parquet-inputformat", "mapred.input.dir=" + in.toUri()),
+            new InputSpec("1", "text-inputformat", "mapred.input.dir=" + in2.toUri())
             )
         );
 
@@ -125,6 +130,66 @@ public class TestIsolatedInputFormat {
         o.close();
       }
     }
+  }
+
+  @Test
+  public void testConfigurationIsolation() throws Exception {
+    FileSystem fileSystem = getFileSystem();
+    Path out = new Path("target/testData/TestIsolatedInputFormat/out");
+    fileSystem.delete(out, true);
+
+    // configure job
+    Job job = new Job(mrCluster.createJobConf());
+    IsolatedInputFormat.setInputFormats(
+        job,
+        asList(
+            new InputFormatDefinition("ConfigModifierInputFormat", null, "com.twitter.hadoop.isolated.ConfigModifierInputFormat")
+            )
+        );
+    IsolatedInputFormat.setInputSpecs(
+        job,
+        asList(
+            new InputSpec("0", "ConfigModifierInputFormat", "my.external.key=1"),
+            new InputSpec("1", "ConfigModifierInputFormat", "my.external.key=2")
+            )
+        );
+
+    job.setInputFormatClass(IsolatedInputFormat.class);
+    job.setNumReduceTasks(0);
+    job.setOutputFormatClass(TextOutputFormat.class);
+    job.setMapperClass(MyMapper.class);
+    TextOutputFormat.setOutputPath(job, out);
+    job.submit();
+    waitForJob(job);
+    validate(fileSystem.open(new Path(out, "part-m-00000")), "1");
+    validate(fileSystem.open(new Path(out, "part-m-00001")), "2");
+  }
+
+  private void validate(InputStream s, String v) throws IOException {
+    BufferedReader r = new BufferedReader(new InputStreamReader(s));
+    Assert.assertEquals("key:" + v + "\tvalue:" + v, r.readLine());
+    r.close();
+  }
+
+  @Test
+  public void testConfigModifierInputFormat() throws Exception {
+    FileSystem fileSystem = getFileSystem();
+    Path out = new Path("target/testData/testConfigModifierInputFormat/out");
+    fileSystem.delete(out, true);
+
+    // configure job
+    Job job = new Job(mrCluster.createJobConf());
+
+    job.getConfiguration().set("my.external.key", "1");
+    job.setInputFormatClass(ConfigModifierInputFormat.class);
+    job.setNumReduceTasks(0);
+    job.setOutputFormatClass(TextOutputFormat.class);
+    job.setMapperClass(MyMapper.class);
+    TextOutputFormat.setOutputPath(job, out);
+    job.submit();
+    waitForJob(job);
+
+    validate(fileSystem.open(new Path(out, "part-m-00000")), "1");
   }
 
   private void waitForJob(Job job) throws InterruptedException, IOException {

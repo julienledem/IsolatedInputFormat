@@ -39,8 +39,8 @@ public class TestConfigurability {
     assertEquals(sortIFs(ifs), sortIFs(inputFormatDefinitionsFromConf));
 
     List<InputSpec> inputSpecs = asList(
-        new InputSpec("parquet-inputformat", "mapred.input.dir=/foo/bar/1"),
-        new InputSpec("text-inputformat", "mapred.input.dir=/foo/bar/2")
+        new InputSpec("0", "parquet-inputformat", "mapred.input.dir=/foo/bar/1"),
+        new InputSpec("1", "text-inputformat", "mapred.input.dir=/foo/bar/2")
         );
     setInputSpecs(job, inputSpecs);
     List<InputSpec> inputSpecsFromConf = inputSpecsFromConf(job.getConfiguration());
@@ -51,7 +51,7 @@ public class TestConfigurability {
     Collections.sort(iss, new Comparator<InputSpec>() {
       @Override
       public int compare(InputSpec l1, InputSpec l2) {
-        return l1.getInputFormatName().compareTo(l2.getInputFormatName());
+        return l1.getId().compareTo(l2.getId());
       }
     });
     return iss;

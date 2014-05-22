@@ -2,7 +2,6 @@ package com.twitter.hadoop.isolated;
 
 import static java.util.Collections.unmodifiableMap;
 
-import java.util.HashMap;
 import java.util.Map;
 import java.util.TreeMap;
 
@@ -31,7 +30,7 @@ public final class InputFormatDefinition {
     this.name = name;
     this.libraryName = libraryName;
     this.inputFormatClassName = inputFormatClassName;
-    this.conf = unmodifiableMap(new HashMap<String, String>(conf));
+    this.conf = unmodifiableMap(new TreeMap<String, String>(conf));
   }
 
   public InputFormatDefinition(String name, String libraryName,

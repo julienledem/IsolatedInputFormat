@@ -3,12 +3,12 @@ package com.twitter.hadoop.isolated;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.TreeSet;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
@@ -51,7 +51,7 @@ public class IsolatedInputFormat<K, V> extends InputFormat<K, V> {
       @Override
       public void initialize(InputSplit split, TaskAttemptContext context)
           throws IOException, InterruptedException {
-        delegate.initialize(((IsolatedInputSplit)split).getDelegate(), context);
+        IsolatedInputFormat.<K,V>resolverFromConf(context).initializeRecordReader(delegate, (IsolatedInputSplit)split, context);
       }
 
       @Override
@@ -66,7 +66,7 @@ public class IsolatedInputFormat<K, V> extends InputFormat<K, V> {
     return resolverFromConf(context).getSplits(inputSpecsFromConf(context.getConfiguration()), context);
   }
 
-  private static String key(String... values) {
+  static String key(String... values) {
     StringBuilder sb = new StringBuilder("com.twitter.isolated");
     for (String value : values) {
       sb.append(".").append(value);
@@ -75,7 +75,7 @@ public class IsolatedInputFormat<K, V> extends InputFormat<K, V> {
   }
 
   private static Collection<String> getEntries(Configuration conf, String key) {
-    Set<String> result = new HashSet<String>();
+    Set<String> result = new TreeSet<String>();
     for (String property : getEntriesFull(conf, key)) {
       int nextDot = property.indexOf('.');
       if (nextDot != -1) {
@@ -86,7 +86,7 @@ public class IsolatedInputFormat<K, V> extends InputFormat<K, V> {
   }
 
   private static Collection<String> getEntriesFull(Configuration conf, String key) {
-    Set<String> result = new HashSet<String>();
+    Set<String> result = new TreeSet<String>();
     String prefix = key + ".";
     for (Entry<String, String> e : conf) {
       String property = e.getKey();
@@ -110,7 +110,7 @@ public class IsolatedInputFormat<K, V> extends InputFormat<K, V> {
     for (String spec : getEntries(conf, key("inputspec"))) {
       String ifName = conf.get(key("inputspec", spec, "inputformat"));
       Map<String, String> specConf = getConf(conf, key("inputspec", spec));
-      result.add(new InputSpec(ifName, specConf));
+      result.add(new InputSpec(spec, ifName, specConf));
     }
     return result;
   }
@@ -182,13 +182,13 @@ public class IsolatedInputFormat<K, V> extends InputFormat<K, V> {
   }
 
   public static void setInputSpecs(Job job, Collection<InputSpec> inputSpecs) {
-    Configuration conf = job.getConfiguration();
-    int i = 0;
+    setInputSpecs(job.getConfiguration(), inputSpecs);
+  }
+
+  public static void setInputSpecs(Configuration conf, Collection<InputSpec> inputSpecs) {
     for (InputSpec inputSpec : inputSpecs) {
-      String inputSpecId = String.valueOf(i);
-      conf.set(key("inputspec", inputSpecId, "inputformat"), inputSpec.getInputFormatName());
-      setConf(conf, key("inputspec", inputSpecId), inputSpec.getConf());
-      ++i;
+      conf.set(key("inputspec", inputSpec.getId(), "inputformat"), inputSpec.getInputFormatName());
+      setConf(conf, key("inputspec", inputSpec.getId()), inputSpec.getConf());
     }
   }
 

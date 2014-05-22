@@ -46,13 +46,14 @@ public class IsolatedInputSplit extends InputSplit implements Writable, Configur
 
   @Override
   public void readFields(DataInput in) throws IOException {
+    String id = in.readUTF();
     String inputFormatName = in.readUTF();
     int count = in.readInt();
     Map<String, String> conf = new HashMap<String, String>();
     for (int i = 0; i < count; i++) {
       conf.put(in.readUTF(), in.readUTF());
     }
-    this.inputSpec = new InputSpec(inputFormatName, conf);
+    this.inputSpec = new InputSpec(id, inputFormatName, conf);
     this.delegate = deserialize(in, in.readUTF());
   }
 
@@ -62,6 +63,7 @@ public class IsolatedInputSplit extends InputSplit implements Writable, Configur
 
   @Override
   public void write(DataOutput out) throws IOException {
+    out.writeUTF(this.inputSpec.getId());
     out.writeUTF(this.inputSpec.getInputFormatName());
     out.writeInt(this.inputSpec.getConf().size());
     for (Entry<String, String> e : inputSpec.getConf().entrySet()) {

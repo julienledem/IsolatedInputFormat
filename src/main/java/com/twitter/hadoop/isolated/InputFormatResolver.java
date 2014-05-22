@@ -1,5 +1,7 @@
 package com.twitter.hadoop.isolated;
 
+import static java.util.Arrays.asList;
+
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -106,7 +108,7 @@ class InputFormatResolver<K, V> {
     }
 
     private boolean apiClass(String name) {
-      return false;
+      return name.equals("org.apache.commons.logging.Log");
     }
   }
 
@@ -128,17 +130,17 @@ class InputFormatResolver<K, V> {
     return classLoader;
   }
 
-  static Configuration newConf(Configuration conf, InputSpec inputSpec, InputFormatDefinition inputFormatDefinition) {
-    Configuration newConf = new Configuration(conf);
-    applyConf(inputFormatDefinition.getConf(), newConf);
-    applyConf(inputSpec.getConf(), newConf);
-    return newConf;
-  }
-
-  static void applyConf(Map<String, String> map, Configuration conf) {
+  private static void applyConf(Configuration conf, Map<String, String> map) {
     for (Entry<String, String> entry : map.entrySet()) {
       conf.set(entry.getKey(), entry.getValue());
     }
+  }
+
+  static Configuration newConf(final Configuration conf, final InputSpec inputSpec, final InputFormatDefinition inputFormatDefinition) {
+    Configuration newConf = new Configuration(conf);
+    applyConf(newConf, inputFormatDefinition.getConf());
+    applyConf(newConf, inputSpec.getConf());
+    return newConf;
   }
 
   private static <T> T lookup(Map<String, T> map, String key) {
@@ -186,31 +188,99 @@ class InputFormatResolver<K, V> {
     }
   }
 
-  private static interface ContextualCall<T> {
-    T call(Configuration conf) throws IOException, InterruptedException;
+  private static abstract class JobContextualRun extends ContextualCall<Void> {
+    private final JobContext context;
+
+    JobContextualRun(InputSpec inputSpec, JobContext context) {
+      super(inputSpec, context.getConfiguration());
+      this.context = context;
+    }
+
+    abstract void run(JobContext context) throws IOException, InterruptedException;
+
+    @Override
+    final public Void call(Configuration conf) throws IOException, InterruptedException {
+      JobContext newContext = new JobContext(conf, context.getJobID());
+      this.run(newContext);
+      checkConfUpdate(conf, newContext.getConfiguration());
+      return null;
+    }
   }
 
-  private static interface ContextualRun {
-    void run(Configuration conf) throws IOException, InterruptedException;
+  private static abstract class TaskContextualRun extends TaskContextualCall<Void> {
+
+    TaskContextualRun(InputSpec inputSpec, TaskAttemptContext context) {
+      super(inputSpec, context);
+    }
+
+    abstract void run(TaskAttemptContext context) throws IOException, InterruptedException;
+
+    @Override
+    final Void call(TaskAttemptContext context) throws IOException, InterruptedException {
+      run(context);
+      return null;
+    }
   }
 
-  private void runInContext(Configuration conf, InputSpec inputSpec, final ContextualRun runable) throws IOException {
-    callInContext(conf, inputSpec, new ContextualCall<Void>() {
-      @Override
-      public Void call(Configuration conf) throws IOException, InterruptedException {
-        runable.run(conf);
-        return null;
+  private static abstract class TaskContextualCall<T> extends ContextualCall<T> {
+    private final TaskAttemptContext context;
+
+    TaskContextualCall(InputSpec inputSpec, TaskAttemptContext context) {
+      super(inputSpec, context.getConfiguration());
+      this.context = context;
+    }
+
+    abstract T call(TaskAttemptContext context) throws IOException, InterruptedException;
+
+    @Override
+    final public T call(Configuration conf) throws IOException, InterruptedException {
+      TaskAttemptContext newContext = new TaskAttemptContext(conf, context.getTaskAttemptID());
+      T t = this.call(newContext);
+      checkConfUpdate(conf, newContext.getConfiguration());
+      return t;
+    }
+  }
+
+  private static abstract class ContextualCall<T> {
+    private final Configuration conf;
+    protected final InputSpec inputSpec;
+
+    ContextualCall(InputSpec inputSpec, Configuration conf) {
+      this.inputSpec = inputSpec;
+      this.conf = conf;
+    }
+
+    abstract T call(Configuration conf) throws IOException, InterruptedException;
+
+    final void checkConfUpdate(Configuration before, Configuration after) {
+      for (Entry<String, String> e : after) {
+        String previous = before.getRaw(e.getKey());
+        if (previous == null || !previous.equals(e.getValue())) {
+          inputSpec.getConf().put(e.getKey(), e.getValue());
+        }
+        IsolatedInputFormat.setInputSpecs(conf, asList(inputSpec));
       }
-    });
+    }
+
   }
 
-  private <T> T callInContext(Configuration conf, InputSpec inputSpec, ContextualCall<T> callable) throws IOException {
+  /**
+   * guarantees that the delegated calls are done in the right context:
+   *  - classloader to the proper lib
+   *  - configuration from the proper inputSpec and InputFormat
+   *  - configuration modifications are propagated in isolation
+   * @param callable what to do
+   * @return what callable returns
+   * @throws IOException
+   */
+  private <T> T callInContext(ContextualCall<T> callable) throws IOException {
     Thread currentThread = Thread.currentThread();
     ClassLoader contextClassLoader = currentThread.getContextClassLoader();
     try {
+      InputSpec inputSpec = callable.inputSpec;
       InputFormatDefinition inputFormatDefinition = lookup(inputFormatDefByName, inputSpec.getInputFormatName());
       currentThread.setContextClassLoader(lookup(classLoaderByInputFormatName, inputSpec.getInputFormatName()));
-      Configuration newConf = newConf(conf, inputSpec, inputFormatDefinition);
+      Configuration newConf = newConf(callable.conf, inputSpec, inputFormatDefinition);
       return callable.call(newConf);
     } catch (InterruptedException e) {
       throw new IOException("thread interrupted", e);
@@ -219,16 +289,18 @@ class InputFormatResolver<K, V> {
     }
   }
 
-  List<InputSplit> getSplits(List<InputSpec> inputSpecs, final JobContext context)
+  // method that make sure delegated calls are executed in the right context
+
+  List<InputSplit> getSplits(List<InputSpec> inputSpecs, JobContext context)
       throws IOException, InterruptedException {
     final List<InputSplit> finalSplits = new ArrayList<InputSplit>();
     for (final InputSpec inputSpec : inputSpecs) {
-      runInContext(context.getConfiguration(), inputSpec, new ContextualRun() {
-        public void run(Configuration conf) throws IOException, InterruptedException {
+      callInContext(new JobContextualRun(inputSpec, context) {
+        public void run(JobContext context) throws IOException, InterruptedException {
           InputFormat<K, V> inputFormat = newInputFormat(inputSpec.getInputFormatName());
-          List<InputSplit> splits = inputFormat.getSplits(new JobContext(conf, context.getJobID()));
+          List<InputSplit> splits = inputFormat.getSplits(context);
           for (InputSplit inputSplit : splits) {
-            finalSplits.add(new IsolatedInputSplit(inputSpec, inputSplit, conf));
+            finalSplits.add(new IsolatedInputSplit(inputSpec, inputSplit, context.getConfiguration()));
           }
         }
       });
@@ -236,19 +308,19 @@ class InputFormatResolver<K, V> {
     return finalSplits;
   }
 
-  RecordReader<K, V> createRecordReader(final IsolatedInputSplit split, final TaskAttemptContext context)
+  RecordReader<K, V> createRecordReader(final IsolatedInputSplit split, TaskAttemptContext context)
       throws IOException, InterruptedException {
-    return callInContext(context.getConfiguration(), split.getInputSpec(), new ContextualCall<RecordReader<K, V>>() {
-      public RecordReader<K, V> call(Configuration conf) throws IOException,
+    return callInContext(new TaskContextualCall<RecordReader<K, V>>(split.getInputSpec(), context) {
+      public RecordReader<K, V> call(TaskAttemptContext context) throws IOException,
           InterruptedException {
         InputFormat<K, V> inputFormat = newInputFormat(split.getInputSpec().getInputFormatName());
-        return inputFormat.createRecordReader(split.getDelegate(), new TaskAttemptContext(conf, context.getTaskAttemptID()));
+        return inputFormat.createRecordReader(split.getDelegate(), context);
       }
     });
   }
 
   <T extends InputSplit> T deserializeSplit(final InputStream in, InputSpec inputSpec, final String name, Configuration configuration) throws IOException {
-    return callInContext(configuration, inputSpec, new ContextualCall<T>() {
+    return callInContext(new ContextualCall<T>(inputSpec, configuration) {
       public T call(Configuration conf) throws IOException,
           InterruptedException {
         try {
@@ -261,6 +333,14 @@ class InputFormatResolver<K, V> {
         } catch (ClassNotFoundException e) {
           throw new IOException("could not resolve class " + name, e);
         }
+      }
+    });
+  }
+
+  void initializeRecordReader(final RecordReader<K, V> delegate, final IsolatedInputSplit split, TaskAttemptContext context) throws IOException {
+    callInContext(new TaskContextualRun(split.getInputSpec(), context) {
+      public void run(TaskAttemptContext context) throws IOException, InterruptedException {
+        delegate.initialize(split.getDelegate(), context);
       }
     });
   }
