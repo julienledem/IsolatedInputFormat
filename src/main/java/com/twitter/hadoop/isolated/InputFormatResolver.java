@@ -1,28 +1,17 @@
 package com.twitter.hadoop.isolated;
 
+import static com.twitter.hadoop.isolated.LibraryManager.getClassLoader;
 import static java.util.Arrays.asList;
 
-import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.MalformedURLException;
-import java.net.URI;
-import java.net.URL;
-import java.net.URLClassLoader;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FSDataInputStream;
-import org.apache.hadoop.fs.FileStatus;
-import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.io.serializer.Deserializer;
 import org.apache.hadoop.io.serializer.SerializationFactory;
 import org.apache.hadoop.mapreduce.InputFormat;
@@ -35,100 +24,6 @@ import org.apache.hadoop.util.ReflectionUtils;
 
 class InputFormatResolver<K, V> {
 
-  private static URL[] toURLs(List<Path> jars) {
-    try {
-      URL[] result = new URL[jars.size()];
-      for (int i = 0; i < result.length; i++) {
-        Path path = jars.get(i);
-        Configuration conf = new Configuration();
-        FileSystem fs = path.getFileSystem(conf);
-        validate(path, fs);
-        URI uri = path.toUri();
-        if (!uri.getScheme().equals("file")) {
-          File tmp = File.createTempFile(path.getName(), ".jar");
-          tmp.deleteOnExit();
-          FSDataInputStream s = fs.open(path);
-          FileOutputStream fso = new FileOutputStream(tmp);
-          try {
-            IOUtils.copyBytes(s, fso, conf);
-          } finally {
-            IOUtils.closeStream(fso);
-            IOUtils.closeStream(s);
-          }
-          result[i] = tmp.toURI().toURL();
-        } else {
-          throw new RuntimeException("jars should be on HDFS: " + path);
-//          result[i] = uri.toURL();
-        }
-      }
-      return result;
-    } catch (MalformedURLException e) {
-      throw new RuntimeException(e);
-    } catch (IOException e) {
-      throw new RuntimeException(e);
-    }
-  }
-
-  private static void validate(Path path, FileSystem fs) throws IOException {
-    FileStatus fileStatus = fs.getFileStatus(path);
-    if (fileStatus.isDir()) {
-      throw new RuntimeException(path + " should be a jar");
-    }
-    byte[] header = new byte[4];
-    FSDataInputStream s = fs.open(path);
-    s.readFully(header);
-    s.close();
-    byte[] expected = { 80, 75, 3, 4 }; // zip file header
-    if (!Arrays.equals(expected, header)) {
-      throw new RuntimeException("path " + path + " is not a valid jar");
-    }
-  }
-
-  private static final class IsolatedClassLoader extends URLClassLoader {
-    private IsolatedClassLoader(Library lib, ClassLoader parent) {
-      super(toURLs(lib.getJars()), parent);
-    }
-
-    @Override
-    protected synchronized Class<?> loadClass(String name, boolean resolve)
-        throws ClassNotFoundException {
-      Class<?> c = findLoadedClass(name);
-      if (c == null && !apiClass(name)) {
-        try {
-          c = findClass(name);
-        } catch (ClassNotFoundException e) { }
-      }
-      if (c == null) { // try parent
-        c = getParent().loadClass(name);
-      }
-      if (resolve) {
-        resolveClass(c);
-      }
-      return c;
-    }
-
-    private boolean apiClass(String name) {
-      return name.equals("org.apache.commons.logging.Log");
-    }
-  }
-
-  private static Map<Library, ClassLoader> classLoaderByLib = new HashMap<Library, ClassLoader>();
-
-  /**
-   * ensures we always return the same class loader for the same library definition
-   * otherwise you can get "Foo can not be cast to Foo" errors
-   * @param lib the lib definition
-   * @return the corresponding classloader
-   */
-  private static ClassLoader getClassLoader(Library lib) {
-    ClassLoader classLoader = classLoaderByLib.get(lib);
-    if (classLoader == null) {
-      ClassLoader parent = InputFormatResolver.class.getClassLoader();
-      classLoader = lib == null ? parent : new IsolatedClassLoader(lib, parent);
-      classLoaderByLib.put(lib, classLoader);
-    }
-    return classLoader;
-  }
 
   private static void applyConf(Configuration conf, Map<String, String> map) {
     for (Entry<String, String> entry : map.entrySet()) {
@@ -153,10 +48,11 @@ class InputFormatResolver<K, V> {
 
   private Map<String, Library> libByName = new HashMap<String, Library>();
   private Map<String, InputFormatDefinition> inputFormatDefByName = new HashMap<String, InputFormatDefinition>();
+  private Map<String, InputSpec> inputSpecByName = new HashMap<String, InputSpec>();
   private Map<String, Class<InputFormat<K, V>>> inputFormatByName = new HashMap<String, Class<InputFormat<K, V>>>();
   private Map<String, ClassLoader> classLoaderByInputFormatName = new HashMap<String, ClassLoader>();
 
-  InputFormatResolver(List<Library> libraries, List<InputFormatDefinition> inputFormatDefinitions) {
+  InputFormatResolver(List<Library> libraries, List<InputFormatDefinition> inputFormatDefinitions, List<InputSpec> inputSpecs) {
     for (Library library : libraries) {
       libByName.put(library.getName(), library);
     }
@@ -175,6 +71,10 @@ class InputFormatResolver<K, V> {
       } catch (ClassNotFoundException e) {
         throw new RuntimeException("InputFormat not found " + inputFormatDef.getInputFormatClassName() + " in lib " + inputFormatDef.getLibraryName(), e);
       }
+    }
+    for (InputSpec spec : inputSpecs) {
+      lookup(inputFormatDefByName, spec.getInputFormatName()); // validate conf
+      inputSpecByName.put(spec.getId(), spec);
     }
   }
 
@@ -300,7 +200,7 @@ class InputFormatResolver<K, V> {
           InputFormat<K, V> inputFormat = newInputFormat(inputSpec.getInputFormatName());
           List<InputSplit> splits = inputFormat.getSplits(context);
           for (InputSplit inputSplit : splits) {
-            finalSplits.add(new IsolatedInputSplit(inputSpec, inputSplit, context.getConfiguration()));
+            finalSplits.add(new IsolatedInputSplit(inputSpec.getId(), inputSplit, context.getConfiguration()));
           }
         }
       });
@@ -310,35 +210,40 @@ class InputFormatResolver<K, V> {
 
   RecordReader<K, V> createRecordReader(final IsolatedInputSplit split, TaskAttemptContext context)
       throws IOException, InterruptedException {
-    return callInContext(new TaskContextualCall<RecordReader<K, V>>(split.getInputSpec(), context) {
+    return callInContext(new TaskContextualCall<RecordReader<K, V>>(lookup(inputSpecByName, split.getInputSpecID()), context) {
       public RecordReader<K, V> call(TaskAttemptContext context) throws IOException,
           InterruptedException {
-        InputFormat<K, V> inputFormat = newInputFormat(split.getInputSpec().getInputFormatName());
+        InputFormat<K, V> inputFormat = newInputFormat(inputSpec.getInputFormatName());
         return inputFormat.createRecordReader(split.getDelegate(), context);
       }
     });
   }
 
-  <T extends InputSplit> T deserializeSplit(final InputStream in, InputSpec inputSpec, final String name, Configuration configuration) throws IOException {
-    return callInContext(new ContextualCall<T>(inputSpec, configuration) {
-      public T call(Configuration conf) throws IOException,
+  InputSplit deserializeSplit(final InputStream in, String inputSpecID, final String name, Configuration configuration) throws IOException {
+    return callInContext(new ContextualCall<InputSplit>(lookup(inputSpecByName, inputSpecID), configuration) {
+      public InputSplit call(Configuration conf) throws IOException,
           InterruptedException {
         try {
-          Class<T> splitClass = (Class<T>)conf.getClassByName(name).asSubclass(InputSplit.class);
-          T delegateInstance = ReflectionUtils.newInstance(splitClass, conf);
-          SerializationFactory factory = new SerializationFactory(conf);
-          Deserializer<T> deserializer = factory.getDeserializer(splitClass);
-          deserializer.open(in);
-          return deserializer.deserialize(delegateInstance);
+          Class<? extends InputSplit> splitClass = conf.getClassByName(name).asSubclass(InputSplit.class);
+          return deserialize(in, conf, splitClass);
         } catch (ClassNotFoundException e) {
           throw new IOException("could not resolve class " + name, e);
         }
+      }
+
+      // we need to define a common T for these calls to work together
+      private <T extends InputSplit> InputSplit deserialize(final InputStream in, Configuration conf, Class<T> splitClass) throws IOException {
+        T delegateInstance = ReflectionUtils.newInstance(splitClass, conf);
+        SerializationFactory factory = new SerializationFactory(conf);
+        Deserializer<T> deserializer = factory.getDeserializer(splitClass);
+        deserializer.open(in);
+        return deserializer.deserialize(delegateInstance);
       }
     });
   }
 
   void initializeRecordReader(final RecordReader<K, V> delegate, final IsolatedInputSplit split, TaskAttemptContext context) throws IOException {
-    callInContext(new TaskContextualRun(split.getInputSpec(), context) {
+    callInContext(new TaskContextualRun(lookup(inputSpecByName, split.getInputSpecID()), context) {
       public void run(TaskAttemptContext context) throws IOException, InterruptedException {
         delegate.initialize(split.getDelegate(), context);
       }

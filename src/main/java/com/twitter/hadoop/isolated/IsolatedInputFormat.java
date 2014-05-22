@@ -102,7 +102,10 @@ public class IsolatedInputFormat<K, V> extends InputFormat<K, V> {
   }
 
   static <K, V> InputFormatResolver<K, V> resolverFromConf(Configuration conf) {
-    return new InputFormatResolver<K, V>(librariesFromConf(conf), inputFormatDefinitionsFromConf(conf));
+    return new InputFormatResolver<K, V>(
+        librariesFromConf(conf),
+        inputFormatDefinitionsFromConf(conf),
+        inputSpecsFromConf(conf));
   }
 
   static List<InputSpec> inputSpecsFromConf(Configuration conf) {

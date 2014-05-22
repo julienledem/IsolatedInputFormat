@@ -1,14 +1,13 @@
 package com.twitter.hadoop.isolated;
 
+import static com.twitter.hadoop.isolated.IsolatedInputFormat.resolverFromConf;
+
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Map.Entry;
 
 import org.apache.hadoop.conf.Configurable;
 import org.apache.hadoop.conf.Configuration;
@@ -20,16 +19,16 @@ import org.apache.hadoop.mapreduce.InputSplit;
 public class IsolatedInputSplit extends InputSplit implements Writable, Configurable {
 
   private InputSplit delegate;
-  private InputSpec inputSpec;
+  private String inputSpecID;
   transient private Configuration configuration;
 
   public IsolatedInputSplit() {
     // Writable
   }
 
-  IsolatedInputSplit(InputSpec inputSpec, InputSplit delegate, Configuration configuration) {
+  IsolatedInputSplit(String inputSpecID, InputSplit delegate, Configuration configuration) {
     super();
-    this.inputSpec = inputSpec;
+    this.inputSpecID = inputSpecID;
     this.delegate = delegate;
     this.configuration = configuration;
   }
@@ -46,39 +45,32 @@ public class IsolatedInputSplit extends InputSplit implements Writable, Configur
 
   @Override
   public void readFields(DataInput in) throws IOException {
-    String id = in.readUTF();
-    String inputFormatName = in.readUTF();
-    int count = in.readInt();
-    Map<String, String> conf = new HashMap<String, String>();
-    for (int i = 0; i < count; i++) {
-      conf.put(in.readUTF(), in.readUTF());
-    }
-    this.inputSpec = new InputSpec(id, inputFormatName, conf);
-    this.delegate = deserialize(in, in.readUTF());
+    this.inputSpecID = in.readUTF();
+    this.delegate = deserialize((InputStream)in, in.readUTF());
   }
 
-  private <T extends InputSplit> T deserialize(DataInput in, String name) throws IOException {
-    return IsolatedInputFormat.resolverFromConf(configuration).<T>deserializeSplit((InputStream)in, inputSpec, name, configuration);
+  private InputSplit deserialize(InputStream in, String name) throws IOException {
+    return resolverFromConf(configuration)
+              .deserializeSplit(in, inputSpecID, name, configuration);
   }
 
   @Override
-  public void write(DataOutput out) throws IOException {
-    out.writeUTF(this.inputSpec.getId());
-    out.writeUTF(this.inputSpec.getInputFormatName());
-    out.writeInt(this.inputSpec.getConf().size());
-    for (Entry<String, String> e : inputSpec.getConf().entrySet()) {
-      out.writeUTF(e.getKey());
-      out.writeUTF(e.getValue());
-    }
-    out.writeUTF(this.delegate.getClass().getName());
-    SerializationFactory factory = new SerializationFactory(configuration);
-    Serializer serializer = factory.getSerializer(this.delegate.getClass());
-    serializer.open((OutputStream)out);
-    serializer.serialize(this.delegate);
+  public void write(final DataOutput out) throws IOException {
+    out.writeUTF(this.inputSpecID);
+    Class<?> delegateClass = this.delegate.getClass();
+    out.writeUTF(delegateClass.getName());
+    serializeDelegate(new AdapterOutput(out), delegateClass);
   }
 
-  InputSpec getInputSpec() {
-    return inputSpec;
+  private <T> void serializeDelegate(OutputStream out, Class<T> delegateClass) throws IOException {
+    SerializationFactory factory = new SerializationFactory(configuration);
+    Serializer<T> serializer = factory.getSerializer(delegateClass);
+    serializer.open(out);
+    serializer.serialize(delegateClass.cast(this.delegate));
+  }
+
+  String getInputSpecID() {
+    return inputSpecID;
   }
 
   InputSplit getDelegate() {
@@ -97,6 +89,24 @@ public class IsolatedInputSplit extends InputSplit implements Writable, Configur
       Configuration.dumpConfiguration(configuration, new OutputStreamWriter(System.out));
     } catch (IOException e) {
       e.printStackTrace();
+    }
+  }
+
+  private static final class AdapterOutput extends OutputStream {
+    private final DataOutput out;
+
+    private AdapterOutput(DataOutput out) {
+      this.out = out;
+    }
+
+    @Override
+    public void write(int b) throws IOException {
+      out.write(b);
+    }
+
+    @Override
+    public void write(byte[] b, int off, int len) throws IOException {
+      out.write(b, off, len);
     }
   }
 
