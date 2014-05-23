@@ -1,13 +1,19 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <parent>
+    <groupId>com.twitter</groupId>
+    <artifactId>isolated</artifactId>
+    <relativePath>../pom.xml</relativePath>
+    <version>0.1.0-SNAPSHOT</version>
+  </parent>
 
   <modelVersion>4.0.0</modelVersion>
 
   <groupId>com.twitter</groupId>
-  <artifactId>isolated</artifactId>
+  <artifactId>isolated-hadoop</artifactId>
   <version>0.1.0-SNAPSHOT</version>
-  <packaging>pom</packaging>
+  <packaging>jar</packaging>
 
-  <name>Isolated services for hadoop</name>
+  <name>Isolated InputFormat</name>
   <url>http://github.com/julienledem/IsolatedInputFormat</url>
   <description></description>
 
@@ -25,31 +31,20 @@
     </developer>
   </developers>
 
-  <properties>
-    <maven.compiler.source>1.6</maven.compiler.source>
-    <maven.compiler.target>1.6</maven.compiler.target>
-    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <hadoop.version>1.2.1</hadoop.version>
-  </properties>
-
-  <modules>
-    <module>isolated-hadoop</module>
-  </modules>
-
   <build>
   </build>
 
   <dependencies>
     <dependency>
-      <groupId>junit</groupId>
-      <artifactId>junit</artifactId>
-      <version>4.8.2</version>
-      <scope>test</scope>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-core</artifactId>
+      <version>${hadoop.version}</version>
+      <scope>provided</scope>
     </dependency>
     <dependency>
-      <groupId>log4j</groupId>
-      <artifactId>log4j</artifactId>
-      <version>1.2.17</version>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-minicluster</artifactId>
+      <version>${hadoop.version}</version>
       <scope>test</scope>
     </dependency>
   </dependencies>
