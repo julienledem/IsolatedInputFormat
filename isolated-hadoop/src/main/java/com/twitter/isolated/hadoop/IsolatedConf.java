@@ -112,7 +112,10 @@ public class IsolatedConf {
   }
 
   public static void setInputSpecs(Configuration conf, Collection<InputSpec> inputSpecs) {
-    setInputSpecs(conf, inputSpecs);
+    for (InputSpec inputSpec : inputSpecs) {
+      conf.set(key("inputspec", inputSpec.getId(), "inputformat"), inputSpec.getInputFormatName());
+      setConf(conf, key("inputspec", inputSpec.getId()), inputSpec.getConf());
+    }
   }
 
   private static Map<String, String> getConf(Configuration conf, String baseKey) {
