@@ -1,4 +1,4 @@
-package com.twitter.hadoop.isolated;
+package com.twitter.isolated.hadoop.mapred;
 
 import static java.lang.Thread.sleep;
 import static java.util.Arrays.asList;
@@ -20,12 +20,18 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.mapred.MiniMRCluster;
-import org.apache.hadoop.mapreduce.Job;
-import org.apache.hadoop.mapreduce.Mapper;
-import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
+import org.apache.hadoop.mapred.RunningJob;
+import org.apache.hadoop.mapred.TextInputFormat;
+import org.apache.hadoop.mapred.TextOutputFormat;
+import org.apache.hadoop.mapred.jobcontrol.Job;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+
+import com.twitter.isolated.hadoop.InputFormatDefinition;
+import com.twitter.isolated.hadoop.InputSpec;
+import com.twitter.isolated.hadoop.IsolatedConf;
+import com.twitter.isolated.hadoop.Library;
 
 public class TestIsolatedInputFormat {
   private MiniDFSCluster dfsCluster;
@@ -56,8 +62,7 @@ public class TestIsolatedInputFormat {
     return dfsCluster.getFileSystem();
   }
 
-  public static class MyMapper extends Mapper<String, String, String, String> {
-  }
+
 
   @Test
   public void testClassLoaderIsolation() throws Exception {
@@ -85,38 +90,38 @@ public class TestIsolatedInputFormat {
 
     // configure job
     Job job = new Job(mrCluster.createJobConf());
-    IsolatedInputFormat.setLibraries(
-        job,
+    IsolatedConf.setLibraries(
+        job.getJobConf(),
         asList(
             new Library("parquet-lib", parquetJar)
             )
         );
-    IsolatedInputFormat.setInputFormats(
-        job,
+    IsolatedConf.setInputFormats(
+        job.getJobConf(),
         asList(
-            new InputFormatDefinition("parquet-inputformat", "parquet-lib", "parquet.hadoop.ParquetInputFormat", "parquet.read.support.class=parquet.hadoop.example.GroupReadSupport"),
-            new InputFormatDefinition("text-inputformat", null, "org.apache.hadoop.mapreduce.lib.input.TextInputFormat")
+            new InputFormatDefinition("parquet-inputformat", "parquet-lib", "parquet.hadoop.mapred.DeprecatedParquetInputFormat", "parquet.read.support.class=parquet.hadoop.example.GroupReadSupport"),
+            new InputFormatDefinition("text-inputformat", null, TextInputFormat.class.getName())
             )
         );
-    IsolatedInputFormat.setInputSpecs(
-        job,
+    IsolatedConf.setInputSpecs(
+        job.getJobConf(),
         asList(
             new InputSpec("0", "parquet-inputformat", "mapred.input.dir=" + in.toUri()),
             new InputSpec("1", "text-inputformat", "mapred.input.dir=" + in2.toUri())
             )
         );
 
-    job.setInputFormatClass(IsolatedInputFormat.class);
-    job.setNumReduceTasks(0);
-    job.setOutputFormatClass(TextOutputFormat.class);
-    job.setMapperClass(MyMapper.class);
-    TextOutputFormat.setOutputPath(job, out);
+    job.getJobConf().setInputFormat(IsolatedInputFormat.class);
+    job.getJobConf().setNumReduceTasks(0);
+    job.getJobConf().setOutputFormat(TextOutputFormat.class);
+    TextOutputFormat.setOutputPath(job.getJobConf(), out);
 
-    for (Entry<String, String> e : job.getConfiguration()) {
+    for (Entry<String, String> e : job.getJobConf()) {
       System.out.println(e);
     }
-    job.submit();
-    waitForJob(job);
+
+    RunningJob runningJob = job.getJobClient().submitJob(job.getJobConf());
+    waitForJob(runningJob);
     FileStatus[] list = fileSystem.listStatus(out);
     for (FileStatus fileStatus : list) {
       System.out.println(fileStatus.getPath());
@@ -131,74 +136,21 @@ public class TestIsolatedInputFormat {
     }
   }
 
-  @Test
-  public void testConfigurationIsolation() throws Exception {
-    FileSystem fileSystem = getFileSystem();
-    Path out = new Path("target/testData/TestIsolatedInputFormat/out");
-    fileSystem.delete(out, true);
-
-    // configure job
-    Job job = new Job(mrCluster.createJobConf());
-    IsolatedInputFormat.setInputFormats(
-        job,
-        asList(
-            new InputFormatDefinition("ConfigModifierInputFormat", null, "com.twitter.hadoop.isolated.ConfigModifierInputFormat")
-            )
-        );
-    IsolatedInputFormat.setInputSpecs(
-        job,
-        asList(
-            new InputSpec("0", "ConfigModifierInputFormat", "my.external.key=1"),
-            new InputSpec("1", "ConfigModifierInputFormat", "my.external.key=2")
-            )
-        );
-
-    job.setInputFormatClass(IsolatedInputFormat.class);
-    job.setNumReduceTasks(0);
-    job.setOutputFormatClass(TextOutputFormat.class);
-    job.setMapperClass(MyMapper.class);
-    TextOutputFormat.setOutputPath(job, out);
-    job.submit();
-    waitForJob(job);
-    validate(fileSystem.open(new Path(out, "part-m-00000")), "1");
-    validate(fileSystem.open(new Path(out, "part-m-00001")), "2");
-  }
-
   private void validate(InputStream s, String v) throws IOException {
     BufferedReader r = new BufferedReader(new InputStreamReader(s));
     assertEquals("key:" + v + "\tvalue:" + v, r.readLine());
     r.close();
   }
 
-  @Test
-  public void testConfigModifierInputFormat() throws Exception {
-    FileSystem fileSystem = getFileSystem();
-    Path out = new Path("target/testData/testConfigModifierInputFormat/out");
-    fileSystem.delete(out, true);
+  private void waitForJob(RunningJob runningJob) throws InterruptedException, IOException {
 
-    // configure job
-    Job job = new Job(mrCluster.createJobConf());
-
-    job.getConfiguration().set("my.external.key", "1");
-    job.setInputFormatClass(ConfigModifierInputFormat.class);
-    job.setNumReduceTasks(0);
-    job.setOutputFormatClass(TextOutputFormat.class);
-    job.setMapperClass(MyMapper.class);
-    TextOutputFormat.setOutputPath(job, out);
-    job.submit();
-    waitForJob(job);
-
-    validate(fileSystem.open(new Path(out, "part-m-00000")), "1");
-  }
-
-  private void waitForJob(Job job) throws InterruptedException, IOException {
-    while (!job.isComplete()) {
-      System.out.println("waiting for job " + job.getJobName() + " " + (int)(job.mapProgress() * 100) + "%");
+    while (!runningJob.isComplete()) {
+      System.out.println("waiting for job " + runningJob.getJobName() + " " + (int)(runningJob.mapProgress() * 100) + "%");
       sleep(100);
     }
-    System.out.println("status for job " + job.getJobName() + ": " + (job.isSuccessful() ? "SUCCESS" : "FAILURE"));
-    if (!job.isSuccessful()) {
-      throw new RuntimeException("job failed " + job.getJobName());
+    System.out.println("status for job " + runningJob.getJobName() + ": " + (runningJob.isSuccessful() ? "SUCCESS" : "FAILURE"));
+    if (!runningJob.isSuccessful()) {
+      throw new RuntimeException("job failed " + runningJob.getJobName());
     }
   }
 }

@@ -1,4 +1,4 @@
-package com.twitter.hadoop.isolated;
+package com.twitter.isolated.hadoop;
 
 import java.io.File;
 import java.io.FileOutputStream;

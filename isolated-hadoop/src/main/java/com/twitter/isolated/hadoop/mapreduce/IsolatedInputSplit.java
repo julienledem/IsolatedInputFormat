@@ -1,6 +1,4 @@
-package com.twitter.hadoop.isolated;
-
-import static com.twitter.hadoop.isolated.IsolatedInputFormat.resolverFromConf;
+package com.twitter.isolated.hadoop.mapreduce;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -50,8 +48,7 @@ public class IsolatedInputSplit extends InputSplit implements Writable, Configur
   }
 
   private InputSplit deserialize(InputStream in, String name) throws IOException {
-    return resolverFromConf(configuration)
-              .deserializeSplit(in, inputSpecID, name, configuration);
+    return new MapreduceContextManager(configuration).deserializeSplit(in, inputSpecID, name, configuration);
   }
 
   @Override

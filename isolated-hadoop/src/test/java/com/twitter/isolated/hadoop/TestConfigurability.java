@@ -1,11 +1,11 @@
-package com.twitter.hadoop.isolated;
+package com.twitter.isolated.hadoop;
 
-import static com.twitter.hadoop.isolated.IsolatedInputFormat.inputFormatDefinitionsFromConf;
-import static com.twitter.hadoop.isolated.IsolatedInputFormat.inputSpecsFromConf;
-import static com.twitter.hadoop.isolated.IsolatedInputFormat.librariesFromConf;
-import static com.twitter.hadoop.isolated.IsolatedInputFormat.setInputFormats;
-import static com.twitter.hadoop.isolated.IsolatedInputFormat.setInputSpecs;
-import static com.twitter.hadoop.isolated.IsolatedInputFormat.setLibraries;
+import static com.twitter.isolated.hadoop.IsolatedConf.inputFormatDefinitionsFromConf;
+import static com.twitter.isolated.hadoop.IsolatedConf.inputSpecsFromConf;
+import static com.twitter.isolated.hadoop.IsolatedConf.librariesFromConf;
+import static com.twitter.isolated.hadoop.IsolatedConf.setInputFormats;
+import static com.twitter.isolated.hadoop.IsolatedConf.setInputSpecs;
+import static com.twitter.isolated.hadoop.IsolatedConf.setLibraries;
 import static java.util.Arrays.asList;
 import static org.junit.Assert.assertEquals;
 
@@ -14,36 +14,36 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.mapreduce.Job;
 import org.junit.Test;
 
 public class TestConfigurability {
   @Test
   public void testConf() throws IOException {
-    Job job = new Job();
+    Configuration conf = new Configuration();
     List<Library> libs = asList(
         new Library("parquet-lib", new Path("foo")),
         new Library("hadoop-lib") // empty
         );
-    setLibraries(job, libs);
-    List<Library> librariesFromConf = librariesFromConf(job.getConfiguration());
+    setLibraries(conf, libs);
+    List<Library> librariesFromConf = librariesFromConf(conf);
     assertEquals(sortLibs(libs), sortLibs(librariesFromConf));
 
     List<InputFormatDefinition> ifs = asList(
         new InputFormatDefinition("parquet-inputformat", "parquet-lib", "parquet.hadoop.ParquetInputFormat", "parquet.read.support.class=parquet.hadoop.example.GroupReadSupport"),
         new InputFormatDefinition("text-inputformat", "hadoop-lib", "org.apache.hadoop.mapreduce.lib.input.TextInputFormat")
         );
-    setInputFormats(job, ifs);
-    List<InputFormatDefinition> inputFormatDefinitionsFromConf = inputFormatDefinitionsFromConf(job.getConfiguration());
+    setInputFormats(conf, ifs);
+    List<InputFormatDefinition> inputFormatDefinitionsFromConf = inputFormatDefinitionsFromConf(conf);
     assertEquals(sortIFs(ifs), sortIFs(inputFormatDefinitionsFromConf));
 
     List<InputSpec> inputSpecs = asList(
         new InputSpec("0", "parquet-inputformat", "mapred.input.dir=/foo/bar/1"),
         new InputSpec("1", "text-inputformat", "mapred.input.dir=/foo/bar/2")
         );
-    setInputSpecs(job, inputSpecs);
-    List<InputSpec> inputSpecsFromConf = inputSpecsFromConf(job.getConfiguration());
+    setInputSpecs(conf, inputSpecs);
+    List<InputSpec> inputSpecsFromConf = inputSpecsFromConf(conf);
     assertEquals(sortISs(inputSpecs), sortISs(inputSpecsFromConf));
   }
 

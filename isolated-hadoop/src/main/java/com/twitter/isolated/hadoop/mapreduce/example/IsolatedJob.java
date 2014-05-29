@@ -1,4 +1,4 @@
-package com.twitter.hadoop.isolated.example;
+package com.twitter.isolated.hadoop.mapreduce.example;
 
 import static java.lang.Thread.sleep;
 
@@ -13,7 +13,7 @@ import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
 
-import com.twitter.hadoop.isolated.IsolatedInputFormat;
+import com.twitter.isolated.hadoop.mapreduce.IsolatedInputFormat;
 
 public class IsolatedJob {
 

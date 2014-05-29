@@ -30,10 +30,12 @@
     <maven.compiler.target>1.6</maven.compiler.target>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <hadoop.version>1.2.1</hadoop.version>
+    <cascading.version>2.5.3</cascading.version>
   </properties>
 
   <modules>
     <module>isolated-hadoop</module>
+    <module>isolated-cascading</module>
   </modules>
 
   <build>

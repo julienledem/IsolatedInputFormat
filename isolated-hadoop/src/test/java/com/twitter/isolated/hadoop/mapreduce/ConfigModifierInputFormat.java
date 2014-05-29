@@ -1,4 +1,4 @@
-package com.twitter.hadoop.isolated;
+package com.twitter.isolated.hadoop.mapreduce;
 
 import java.io.DataInput;
 import java.io.DataOutput;

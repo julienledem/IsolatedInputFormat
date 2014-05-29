@@ -1,4 +1,4 @@
-package com.twitter.hadoop.isolated;
+package com.twitter.isolated.hadoop;
 
 import static java.util.Arrays.asList;
 import static java.util.Collections.unmodifiableList;
