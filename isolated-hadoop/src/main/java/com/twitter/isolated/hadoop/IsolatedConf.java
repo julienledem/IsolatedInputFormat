@@ -13,6 +13,13 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 
 public class IsolatedConf {
+
+  static void setConf(Configuration conf, String key, Map<String, String> m) {
+    for (Entry<String, String> e: m.entrySet()) {
+      conf.set(key + ".conf." + e.getKey(), e.getValue());
+    }
+  }
+
   static String key(String... values) {
     StringBuilder sb = new StringBuilder("com.twitter.isolated");
     for (String value : values) {
@@ -100,12 +107,12 @@ public class IsolatedConf {
       if (ifDef.getLibraryName() != null) {
         conf.set(key("inputformat", ifDef.getName(), "library"), ifDef.getLibraryName());
       }
-      ContextManager.setConf(conf, key("inputformat", ifDef.getName()), ifDef.getConf());
+      setConf(conf, key("inputformat", ifDef.getName()), ifDef.getConf());
     }
   }
 
   public static void setInputSpecs(Configuration conf, Collection<InputSpec> inputSpecs) {
-    ContextManager.setInputSpecs(conf, inputSpecs);
+    setInputSpecs(conf, inputSpecs);
   }
 
   private static Map<String, String> getConf(Configuration conf, String baseKey) {

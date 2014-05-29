@@ -24,13 +24,13 @@ public class MapredContextManager extends ContextManager {
 
   public InputSplit[] getSplits(final int numSplits) throws IOException {
     List<IsolatedInputSplit> result = new ArrayList<IsolatedInputSplit>();
-    for (InputSpec inputSpec : super.getInputSpecs()) {
-      result.addAll(callInContext(new ContextualCall<List<IsolatedInputSplit>>(inputSpec) {
+    for (final InputSpec inputSpec : super.getInputSpecs()) {
+      result.addAll(callInContext(inputSpec, new MapredContextualCall<List<IsolatedInputSplit>>() {
         @Override
-        public List<IsolatedInputSplit> call(Configuration contextualConf) throws IOException, InterruptedException {
+        public List<IsolatedInputSplit> call(JobConf contextualConf) throws IOException, InterruptedException {
           InputFormat<?, ?> inputFormat = newInputFormat(contextualConf, inputSpec, InputFormat.class);
           List<IsolatedInputSplit> finalSplits = new ArrayList<IsolatedInputSplit>();
-          for (InputSplit inputSplit : inputFormat.getSplits(new JobConf(contextualConf), numSplits)) {
+          for (InputSplit inputSplit : inputFormat.getSplits(contextualConf, numSplits)) {
             finalSplits.add(new IsolatedInputSplit(inputSpec.getId(), inputSplit, new JobConf(conf)));
           }
           return finalSplits;
@@ -42,7 +42,8 @@ public class MapredContextManager extends ContextManager {
 
   public <K, V> RecordReader<K, V> getRecordReader(InputSplit split, final Reporter reporter) throws IOException {
     final IsolatedInputSplit isolatedSplit = (IsolatedInputSplit)split;
-    return callInContext(new MapredContextualCall<RecordReader<K, V>>(getInputSpec(isolatedSplit.getInputSpecID())) {
+    final InputSpec inputSpec = getInputSpec(isolatedSplit.getInputSpecID());
+    return callInContext(inputSpec, new MapredContextualCall<RecordReader<K, V>>() {
       public RecordReader<K, V> call(JobConf contextualConf) throws IOException, InterruptedException {
         @SuppressWarnings("unchecked") // wishful thinking
         InputFormat<K, V> inputFormat = newInputFormat(contextualConf, inputSpec, InputFormat.class);
@@ -51,22 +52,18 @@ public class MapredContextManager extends ContextManager {
     });
   }
 
-  @Override
-  protected Configuration newConf(Configuration conf) {
-    return new JobConf(conf);
-  }
-
   private static abstract class MapredContextualCall<T> extends ContextualCall<T> {
 
-    public MapredContextualCall(InputSpec inputSpec) {
-      super(inputSpec);
-    }
-
-    abstract public T call(JobConf conf) throws IOException, InterruptedException;
+    abstract public T call(JobConf contextualConf) throws IOException, InterruptedException;
 
     @Override
-    public T call(Configuration conf) throws IOException, InterruptedException {
-      return call(conf instanceof JobConf ? (JobConf)conf : new JobConf(conf));
+    public final T call(Configuration contextualConf) throws IOException, InterruptedException {
+      JobConf jobConf = new JobConf(contextualConf);
+      try {
+        return call(jobConf);
+      } finally {
+        setAfterConfiguration(jobConf);
+      }
     }
 
   }

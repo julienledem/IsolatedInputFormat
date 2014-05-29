@@ -31,26 +31,25 @@ public class MapreduceContextManager extends ContextManager {
   private static abstract class JobContextualRun extends ContextualCall<Void> {
     private final JobContext context;
 
-    JobContextualRun(InputSpec inputSpec, JobContext context) {
-      super(inputSpec);
+    JobContextualRun(JobContext context) {
       this.context = context;
     }
 
     abstract void run(JobContext context) throws IOException, InterruptedException;
 
     @Override
-    final public Void call(Configuration conf) throws IOException, InterruptedException {
-      JobContext newContext = new JobContext(conf, context.getJobID());
+    final public Void call(Configuration contextualConf) throws IOException, InterruptedException {
+      JobContext newContext = new JobContext(contextualConf, context.getJobID());
       this.run(newContext);
-      checkConfUpdate(conf, newContext.getConfiguration(), context.getConfiguration());
+      setAfterConfiguration(newContext.getConfiguration());
       return null;
     }
   }
 
   private static abstract class TaskContextualRun extends TaskContextualCall<Void> {
 
-    TaskContextualRun(InputSpec inputSpec, TaskAttemptContext context) {
-      super(inputSpec, context);
+    TaskContextualRun(TaskAttemptContext context) {
+      super(context);
     }
 
     abstract void run(TaskAttemptContext context) throws IOException, InterruptedException;
@@ -65,18 +64,17 @@ public class MapreduceContextManager extends ContextManager {
   private static abstract class TaskContextualCall<T> extends ContextualCall<T> {
     private final TaskAttemptContext context;
 
-    TaskContextualCall(InputSpec inputSpec, TaskAttemptContext context) {
-      super(inputSpec);
+    TaskContextualCall(TaskAttemptContext context) {
       this.context = context;
     }
 
     abstract T call(TaskAttemptContext context) throws IOException, InterruptedException;
 
     @Override
-    final public T call(Configuration conf) throws IOException, InterruptedException {
-      TaskAttemptContext newContext = new TaskAttemptContext(conf, context.getTaskAttemptID());
+    final public T call(Configuration contextualConf) throws IOException, InterruptedException {
+      TaskAttemptContext newContext = new TaskAttemptContext(contextualConf, context.getTaskAttemptID());
       T t = this.call(newContext);
-      checkConfUpdate(conf, newContext.getConfiguration(), context.getConfiguration());
+      setAfterConfiguration(newContext.getConfiguration());
       return t;
     }
   }
@@ -86,7 +84,7 @@ public class MapreduceContextManager extends ContextManager {
   List<InputSplit> getSplits(JobContext context) throws IOException {
     final List<InputSplit> finalSplits = new ArrayList<InputSplit>();
     for (final InputSpec inputSpec : getInputSpecs()) {
-      callInContext(new JobContextualRun(inputSpec, context) {
+      callInContext(inputSpec, new JobContextualRun(context) {
         public void run(JobContext context) throws IOException, InterruptedException {
           InputFormat<?, ?> inputFormat = newInputFormat(context.getConfiguration(), inputSpec, InputFormat.class);
           List<InputSplit> splits = inputFormat.getSplits(context);
@@ -101,7 +99,7 @@ public class MapreduceContextManager extends ContextManager {
 
   <K, V> RecordReader<K, V> createRecordReader(InputSplit split, TaskAttemptContext context) throws IOException {
     final IsolatedInputSplit isolatedSplit = (IsolatedInputSplit)split;
-    return callInContext(new TaskContextualCall<RecordReader<K, V>>(getInputSpec(isolatedSplit.getInputSpecID()), context) {
+    return callInContext(isolatedSplit.getInputSpecID(), new TaskContextualCall<RecordReader<K, V>>(context) {
       public RecordReader<K, V> call(TaskAttemptContext context) throws IOException,
           InterruptedException {
         @SuppressWarnings("unchecked") // wishful thinking
@@ -113,7 +111,7 @@ public class MapreduceContextManager extends ContextManager {
 
   <K, V> void initializeRecordReader(final RecordReader<K, V> delegate, InputSplit split, TaskAttemptContext context) throws IOException {
     final IsolatedInputSplit isolatedSplit = (IsolatedInputSplit)split;
-    callInContext(new TaskContextualRun(getInputSpec(isolatedSplit.getInputSpecID()), context) {
+    callInContext(isolatedSplit.getInputSpecID(), new TaskContextualRun(context) {
       public void run(TaskAttemptContext context) throws IOException, InterruptedException {
         delegate.initialize(isolatedSplit.getDelegate(), context);
       }
@@ -121,7 +119,7 @@ public class MapreduceContextManager extends ContextManager {
   }
 
   InputSplit deserializeSplit(final InputStream in, String inputSpecID, final String name, Configuration configuration) throws IOException {
-    return callInContext(new ContextualCall<InputSplit>(getInputSpec(inputSpecID)) {
+    return callInContext(inputSpecID, new ContextualCall<InputSplit>() {
       public InputSplit call(Configuration conf) throws IOException,
           InterruptedException {
         try {

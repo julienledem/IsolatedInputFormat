@@ -12,7 +12,7 @@ public class IsolatedInputSplit implements InputSplit, JobConfigurable {
 
   private String inputSpecID;
   private InputSplit delegate;
-  transient private JobConf configuration;
+  private JobConf configuration;
 
   public IsolatedInputSplit() {
     // for deserialization
