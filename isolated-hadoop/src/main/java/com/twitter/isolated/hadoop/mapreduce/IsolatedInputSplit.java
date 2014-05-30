@@ -83,11 +83,6 @@ public class IsolatedInputSplit extends InputSplit implements Writable, Configur
   @Override
   public void setConf(Configuration configuration) {
     this.configuration = configuration;
-    try {
-      Configuration.dumpConfiguration(configuration, new OutputStreamWriter(System.out));
-    } catch (IOException e) {
-      e.printStackTrace();
-    }
   }
 
   private static final class AdapterOutput extends OutputStream {
