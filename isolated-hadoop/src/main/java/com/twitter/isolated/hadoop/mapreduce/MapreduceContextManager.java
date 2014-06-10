@@ -16,7 +16,7 @@ import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.hadoop.util.ReflectionUtils;
 
 import com.twitter.isolated.hadoop.ContextManager;
-import com.twitter.isolated.hadoop.InputSpec;
+import com.twitter.isolated.hadoop.Spec;
 
 public class MapreduceContextManager extends ContextManager {
 
@@ -83,13 +83,13 @@ public class MapreduceContextManager extends ContextManager {
 
   List<InputSplit> getSplits(JobContext context) throws IOException {
     final List<InputSplit> finalSplits = new ArrayList<InputSplit>();
-    for (final InputSpec inputSpec : getInputSpecs()) {
+    for (final Spec inputSpec : getInputSpecs()) {
       callInContext(inputSpec, new JobContextualRun(context) {
         public void run(JobContext context) throws IOException, InterruptedException {
-          InputFormat<?, ?> inputFormat = newInputFormat(context.getConfiguration(), inputSpec, InputFormat.class);
+          InputFormat<?, ?> inputFormat = newInstanceFromSpec(context.getConfiguration(), spec, InputFormat.class);
           List<InputSplit> splits = inputFormat.getSplits(context);
           for (InputSplit inputSplit : splits) {
-            finalSplits.add(new IsolatedInputSplit(inputSpec.getId(), inputSplit, context.getConfiguration()));
+            finalSplits.add(new IsolatedInputSplit(spec.getId(), inputSplit, context.getConfiguration()));
           }
         }
       });
@@ -103,7 +103,7 @@ public class MapreduceContextManager extends ContextManager {
       public RecordReader<K, V> call(TaskAttemptContext context) throws IOException,
           InterruptedException {
         @SuppressWarnings("unchecked") // wishful thinking
-        InputFormat<K, V> inputFormat = newInputFormat(context.getConfiguration(), inputSpec, InputFormat.class);
+        InputFormat<K, V> inputFormat = newInstanceFromSpec(context.getConfiguration(), spec, InputFormat.class);
         return inputFormat.createRecordReader(isolatedSplit.getDelegate(), context);
       }
     });

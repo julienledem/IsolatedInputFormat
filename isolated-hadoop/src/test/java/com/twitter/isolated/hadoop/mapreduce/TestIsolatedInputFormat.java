@@ -28,8 +28,8 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
-import com.twitter.isolated.hadoop.InputFormatDefinition;
-import com.twitter.isolated.hadoop.InputSpec;
+import com.twitter.isolated.hadoop.ClassDefinition;
+import com.twitter.isolated.hadoop.Spec;
 import com.twitter.isolated.hadoop.IsolatedConf;
 import com.twitter.isolated.hadoop.Library;
 import com.twitter.isolated.hadoop.mapreduce.IsolatedInputFormat;
@@ -98,18 +98,18 @@ public class TestIsolatedInputFormat {
             new Library("parquet-lib", parquetJar)
             )
         );
-    IsolatedConf.setInputFormats(
+    IsolatedConf.setClassDefinitions(
         job.getConfiguration(),
         asList(
-            new InputFormatDefinition("parquet-inputformat", "parquet-lib", "parquet.hadoop.ParquetInputFormat", "parquet.read.support.class=parquet.hadoop.example.GroupReadSupport"),
-            new InputFormatDefinition("text-inputformat", null, TextInputFormat.class.getName())
+            new ClassDefinition("parquet-inputformat", "parquet-lib", "parquet.hadoop.ParquetInputFormat", "parquet.read.support.class=parquet.hadoop.example.GroupReadSupport"),
+            new ClassDefinition("text-inputformat", null, TextInputFormat.class.getName())
             )
         );
     IsolatedConf.setInputSpecs(
         job.getConfiguration(),
         asList(
-            new InputSpec("0", "parquet-inputformat", "mapred.input.dir=" + in.toUri()),
-            new InputSpec("1", "text-inputformat", "mapred.input.dir=" + in2.toUri())
+            new Spec("0", "parquet-inputformat", "mapred.input.dir=" + in.toUri()),
+            new Spec("1", "text-inputformat", "mapred.input.dir=" + in2.toUri())
             )
         );
 
@@ -119,9 +119,6 @@ public class TestIsolatedInputFormat {
     job.setMapperClass(MyMapper.class);
     TextOutputFormat.setOutputPath(job, out);
 
-    for (Entry<String, String> e : job.getConfiguration()) {
-      System.out.println(e);
-    }
     job.submit();
     waitForJob(job);
     FileStatus[] list = fileSystem.listStatus(out);
@@ -146,17 +143,17 @@ public class TestIsolatedInputFormat {
 
     // configure job
     Job job = new Job(mrCluster.createJobConf());
-    IsolatedConf.setInputFormats(
+    IsolatedConf.setClassDefinitions(
         job.getConfiguration(),
         asList(
-            new InputFormatDefinition("ConfigModifierInputFormat", null, ConfigModifierInputFormat.class.getName())
+            new ClassDefinition("ConfigModifierInputFormat", null, ConfigModifierInputFormat.class.getName())
             )
         );
     IsolatedConf.setInputSpecs(
         job.getConfiguration(),
         asList(
-            new InputSpec("0", "ConfigModifierInputFormat", "my.external.key=1"),
-            new InputSpec("1", "ConfigModifierInputFormat", "my.external.key=2")
+            new Spec("0", "ConfigModifierInputFormat", "my.external.key=1"),
+            new Spec("1", "ConfigModifierInputFormat", "my.external.key=2")
             )
         );
 

@@ -51,23 +51,29 @@ public class IsolatedConf {
     return result;
   }
 
-  static List<InputSpec> inputSpecsFromConf(Configuration conf) {
-    List<InputSpec> result = new ArrayList<InputSpec>();
+  static List<Spec> inputSpecsFromConf(Configuration conf) {
+    List<Spec> result = new ArrayList<Spec>();
     for (String spec : getEntries(conf, key("inputspec"))) {
       String ifName = conf.get(key("inputspec", spec, "inputformat"));
       Map<String, String> specConf = getConf(conf, key("inputspec", spec));
-      result.add(new InputSpec(spec, ifName, specConf));
+      result.add(new Spec(spec, ifName, specConf));
     }
     return result;
   }
 
-  static List<InputFormatDefinition> inputFormatDefinitionsFromConf(Configuration conf) {
-    List<InputFormatDefinition> result = new ArrayList<InputFormatDefinition>();
-    for (String inputformat : getEntries(conf, key("inputformat"))) {
-      String className = conf.get(key("inputformat", inputformat, "class"));
-      String lib = conf.get(key("inputformat", inputformat, "library"));
-      Map<String, String> ifConf = getConf(conf, key("inputformat", inputformat));
-      result.add(new InputFormatDefinition(inputformat, lib, className, ifConf));
+  static Spec outputSpecFromConf(Configuration conf) {
+    String ofName = conf.get(key("outputspec", "outputformat"));
+    Map<String, String> specConf = getConf(conf, key("outputspec"));
+    return new Spec("output", ofName, specConf);
+  }
+
+  static List<ClassDefinition> classDefinitionsFromConf(Configuration conf) {
+    List<ClassDefinition> result = new ArrayList<ClassDefinition>();
+    for (String inputformat : getEntries(conf, key("class"))) {
+      String className = conf.get(key("class", inputformat, "name"));
+      String lib = conf.get(key("class", inputformat, "library"));
+      Map<String, String> ifConf = getConf(conf, key("class", inputformat));
+      result.add(new ClassDefinition(inputformat, lib, className, ifConf));
     }
     return result;
   }
@@ -101,21 +107,26 @@ public class IsolatedConf {
     }
   }
 
-  public static void setInputFormats(Configuration conf, Collection<InputFormatDefinition> inputFormats) {
-    for (InputFormatDefinition ifDef : inputFormats) {
-      conf.set(key("inputformat", ifDef.getName(), "class"), ifDef.getInputFormatClassName());
+  public static void setClassDefinitions(Configuration conf, Collection<ClassDefinition> inputFormats) {
+    for (ClassDefinition ifDef : inputFormats) {
+      conf.set(key("class", ifDef.getName(), "name"), ifDef.getClassName());
       if (ifDef.getLibraryName() != null) {
-        conf.set(key("inputformat", ifDef.getName(), "library"), ifDef.getLibraryName());
+        conf.set(key("class", ifDef.getName(), "library"), ifDef.getLibraryName());
       }
-      setConf(conf, key("inputformat", ifDef.getName()), ifDef.getConf());
+      setConf(conf, key("class", ifDef.getName()), ifDef.getConf());
     }
   }
 
-  public static void setInputSpecs(Configuration conf, Collection<InputSpec> inputSpecs) {
-    for (InputSpec inputSpec : inputSpecs) {
-      conf.set(key("inputspec", inputSpec.getId(), "inputformat"), inputSpec.getInputFormatName());
+  public static void setInputSpecs(Configuration conf, Collection<Spec> inputSpecs) {
+    for (Spec inputSpec : inputSpecs) {
+      conf.set(key("inputspec", inputSpec.getId(), "inputformat"), inputSpec.getClassDefinition());
       setConf(conf, key("inputspec", inputSpec.getId()), inputSpec.getConf());
     }
+  }
+
+  public static void setOutputSpec(Configuration conf, Spec outputSpec) {
+    conf.set(key("outputspec", "outputformat"), outputSpec.getClassDefinition());
+    setConf(conf, key("outputspec"), outputSpec.getConf());
   }
 
   private static Map<String, String> getConf(Configuration conf, String baseKey) {

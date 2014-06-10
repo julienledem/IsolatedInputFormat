@@ -5,7 +5,7 @@ import static java.util.Collections.unmodifiableMap;
 import java.util.Map;
 import java.util.TreeMap;
 
-public final class InputFormatDefinition {
+public final class ClassDefinition {
 
   static Map<String, String> toMap(String[] props) {
     Map<String, String> map = new TreeMap<String, String>();
@@ -21,21 +21,21 @@ public final class InputFormatDefinition {
 
   private final String name;
   private final String libraryName;
-  private final String inputFormatClassName;
+  private final String className;
   private final Map<String, String> conf;
 
-  public InputFormatDefinition(String name, String libraryName,
-      String inputFormatClassName, Map<String, String> conf) {
+  public ClassDefinition(String name, String libraryName,
+      String className, Map<String, String> conf) {
     super();
     this.name = name;
     this.libraryName = libraryName;
-    this.inputFormatClassName = inputFormatClassName;
+    this.className = className;
     this.conf = unmodifiableMap(new TreeMap<String, String>(conf));
   }
 
-  public InputFormatDefinition(String name, String libraryName,
-      String inputFormatClassName, String... props) {
-    this(name, libraryName, inputFormatClassName, toMap(props));
+  public ClassDefinition(String name, String libraryName,
+      String className, String... props) {
+    this(name, libraryName, className, toMap(props));
   }
 
   public String getName() {
@@ -46,8 +46,8 @@ public final class InputFormatDefinition {
     return libraryName;
   }
 
-  public String getInputFormatClassName() {
-    return inputFormatClassName;
+  public String getClassName() {
+    return className;
   }
 
   public Map<String, String> getConf() {
@@ -61,7 +61,7 @@ public final class InputFormatDefinition {
     result = prime * result + ((conf == null) ? 0 : conf.hashCode());
     result = prime
         * result
-        + ((inputFormatClassName == null) ? 0 : inputFormatClassName.hashCode());
+        + ((className == null) ? 0 : className.hashCode());
     result = prime * result
         + ((libraryName == null) ? 0 : libraryName.hashCode());
     result = prime * result + ((name == null) ? 0 : name.hashCode());
@@ -76,16 +76,16 @@ public final class InputFormatDefinition {
       return false;
     if (getClass() != obj.getClass())
       return false;
-    InputFormatDefinition other = (InputFormatDefinition) obj;
+    ClassDefinition other = (ClassDefinition) obj;
     if (conf == null) {
       if (other.conf != null)
         return false;
     } else if (!conf.equals(other.conf))
       return false;
-    if (inputFormatClassName == null) {
-      if (other.inputFormatClassName != null)
+    if (className == null) {
+      if (other.className != null)
         return false;
-    } else if (!inputFormatClassName.equals(other.inputFormatClassName))
+    } else if (!className.equals(other.className))
       return false;
     if (libraryName == null) {
       if (other.libraryName != null)
@@ -102,8 +102,8 @@ public final class InputFormatDefinition {
 
   @Override
   public String toString() {
-    return "InputFormatDefinition [name=" + name + ", libraryName="
-        + libraryName + ", inputFormatClassName=" + inputFormatClassName
+    return "ClassDefinition [name=" + name + ", libraryName="
+        + libraryName + ", className=" + className
         + ", conf=" + conf + "]";
   }
 

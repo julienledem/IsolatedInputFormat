@@ -1,5 +1,9 @@
 package com.twitter.isolated.hadoop.mapred;
 
+import static com.twitter.isolated.hadoop.IsolatedConf.setClassDefinitions;
+import static com.twitter.isolated.hadoop.IsolatedConf.setInputSpecs;
+import static com.twitter.isolated.hadoop.IsolatedConf.setLibraries;
+import static com.twitter.isolated.hadoop.IsolatedConf.setOutputSpec;
 import static java.lang.Thread.sleep;
 import static java.util.Arrays.asList;
 import static org.junit.Assert.assertEquals;
@@ -19,6 +23,7 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
 import org.apache.hadoop.io.IOUtils;
+import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.MiniMRCluster;
 import org.apache.hadoop.mapred.RunningJob;
 import org.apache.hadoop.mapred.TextInputFormat;
@@ -28,8 +33,8 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
-import com.twitter.isolated.hadoop.InputFormatDefinition;
-import com.twitter.isolated.hadoop.InputSpec;
+import com.twitter.isolated.hadoop.ClassDefinition;
+import com.twitter.isolated.hadoop.Spec;
 import com.twitter.isolated.hadoop.IsolatedConf;
 import com.twitter.isolated.hadoop.Library;
 
@@ -90,37 +95,38 @@ public class TestIsolatedInputFormat {
 
     // configure job
     Job job = new Job(mrCluster.createJobConf());
-    IsolatedConf.setLibraries(
-        job.getJobConf(),
+    JobConf jobConf = job.getJobConf();
+    setLibraries(
+        jobConf,
         asList(
             new Library("parquet-lib", parquetJar)
             )
         );
-    IsolatedConf.setInputFormats(
-        job.getJobConf(),
+    setClassDefinitions(
+        jobConf,
         asList(
-            new InputFormatDefinition("parquet-inputformat", "parquet-lib", "parquet.hadoop.mapred.DeprecatedParquetInputFormat", "parquet.read.support.class=parquet.hadoop.example.GroupReadSupport"),
-            new InputFormatDefinition("text-inputformat", null, TextInputFormat.class.getName())
+            new ClassDefinition("parquet-inputformat", "parquet-lib", "parquet.hadoop.mapred.DeprecatedParquetInputFormat", "parquet.read.support.class=parquet.hadoop.example.GroupReadSupport"),
+            new ClassDefinition("text-inputformat", null, TextInputFormat.class.getName()),
+            new ClassDefinition("text-outputformat", null, TextOutputFormat.class.getName())
             )
         );
-    IsolatedConf.setInputSpecs(
-        job.getJobConf(),
+    setInputSpecs(
+        jobConf,
         asList(
-            new InputSpec("0", "parquet-inputformat", "mapred.input.dir=" + in.toUri()),
-            new InputSpec("1", "text-inputformat", "mapred.input.dir=" + in2.toUri())
+            new Spec("0", "parquet-inputformat", "mapred.input.dir=" + in.toUri()),
+            new Spec("1", "text-inputformat", "mapred.input.dir=" + in2.toUri())
             )
         );
+    setOutputSpec(
+        jobConf,
+        new Spec("output", "text-outputformat", "mapred.output.dir=" + out.toUri())
+        );
 
-    job.getJobConf().setInputFormat(IsolatedInputFormat.class);
-    job.getJobConf().setNumReduceTasks(0);
-    job.getJobConf().setOutputFormat(TextOutputFormat.class);
-    TextOutputFormat.setOutputPath(job.getJobConf(), out);
+    jobConf.setInputFormat(IsolatedInputFormat.class);
+    jobConf.setNumReduceTasks(0);
+    jobConf.setOutputFormat(IsolatedOutputFormat.class);
 
-    for (Entry<String, String> e : job.getJobConf()) {
-      System.out.println(e);
-    }
-
-    RunningJob runningJob = job.getJobClient().submitJob(job.getJobConf());
+    RunningJob runningJob = job.getJobClient().submitJob(jobConf);
     waitForJob(runningJob);
     FileStatus[] list = fileSystem.listStatus(out);
     for (FileStatus fileStatus : list) {

@@ -2,24 +2,24 @@ package com.twitter.isolated.hadoop;
 
 import java.util.Map;
 
-public final class InputSpec {
+public final class Spec {
   private final String id;
-  private final String inputFormatName;
+  private final String classDefinition;
   private final Map<String, String> conf;
 
-  public InputSpec(String id, String inputFormatName, Map<String, String> conf) {
+  public Spec(String id, String classDefinition, Map<String, String> conf) {
     super();
     this.id = id;
-    this.inputFormatName = inputFormatName;
+    this.classDefinition = classDefinition;
     this.conf = conf;
   }
 
-  public InputSpec(String id, String inputFormatName, String... props) {
-    this(id, inputFormatName, InputFormatDefinition.toMap(props));
+  public Spec(String id, String classDefinition, String... props) {
+    this(id, classDefinition, ClassDefinition.toMap(props));
   }
 
-  public String getInputFormatName() {
-    return inputFormatName;
+  public String getClassDefinition() {
+    return classDefinition;
   }
 
   public Map<String, String> getConf() {
@@ -37,7 +37,7 @@ public final class InputSpec {
     result = prime * result + ((conf == null) ? 0 : conf.hashCode());
     result = prime * result + ((id == null) ? 0 : id.hashCode());
     result = prime * result
-        + ((inputFormatName == null) ? 0 : inputFormatName.hashCode());
+        + ((classDefinition == null) ? 0 : classDefinition.hashCode());
     return result;
   }
 
@@ -49,7 +49,7 @@ public final class InputSpec {
       return false;
     if (getClass() != obj.getClass())
       return false;
-    InputSpec other = (InputSpec) obj;
+    Spec other = (Spec) obj;
     if (conf == null) {
       if (other.conf != null)
         return false;
@@ -60,17 +60,17 @@ public final class InputSpec {
         return false;
     } else if (!id.equals(other.id))
       return false;
-    if (inputFormatName == null) {
-      if (other.inputFormatName != null)
+    if (classDefinition == null) {
+      if (other.classDefinition != null)
         return false;
-    } else if (!inputFormatName.equals(other.inputFormatName))
+    } else if (!classDefinition.equals(other.classDefinition))
       return false;
     return true;
   }
 
   @Override
   public String toString() {
-    return "InputSpec [id=" + id + ", inputFormatName=" + inputFormatName
+    return "Spec [id=" + id + ", classDefinition=" + classDefinition
         + ", conf=" + conf + "]";
   }
 

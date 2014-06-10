@@ -1,9 +1,9 @@
 package com.twitter.isolated.hadoop;
 
-import static com.twitter.isolated.hadoop.IsolatedConf.inputFormatDefinitionsFromConf;
+import static com.twitter.isolated.hadoop.IsolatedConf.classDefinitionsFromConf;
 import static com.twitter.isolated.hadoop.IsolatedConf.inputSpecsFromConf;
 import static com.twitter.isolated.hadoop.IsolatedConf.librariesFromConf;
-import static com.twitter.isolated.hadoop.IsolatedConf.setInputFormats;
+import static com.twitter.isolated.hadoop.IsolatedConf.setClassDefinitions;
 import static com.twitter.isolated.hadoop.IsolatedConf.setInputSpecs;
 import static com.twitter.isolated.hadoop.IsolatedConf.setLibraries;
 import static java.util.Arrays.asList;
@@ -30,37 +30,37 @@ public class TestConfigurability {
     List<Library> librariesFromConf = librariesFromConf(conf);
     assertEquals(sortLibs(libs), sortLibs(librariesFromConf));
 
-    List<InputFormatDefinition> ifs = asList(
-        new InputFormatDefinition("parquet-inputformat", "parquet-lib", "parquet.hadoop.ParquetInputFormat", "parquet.read.support.class=parquet.hadoop.example.GroupReadSupport"),
-        new InputFormatDefinition("text-inputformat", "hadoop-lib", "org.apache.hadoop.mapreduce.lib.input.TextInputFormat")
+    List<ClassDefinition> ifs = asList(
+        new ClassDefinition("parquet-inputformat", "parquet-lib", "parquet.hadoop.ParquetInputFormat", "parquet.read.support.class=parquet.hadoop.example.GroupReadSupport"),
+        new ClassDefinition("text-inputformat", "hadoop-lib", "org.apache.hadoop.mapreduce.lib.input.TextInputFormat")
         );
-    setInputFormats(conf, ifs);
-    List<InputFormatDefinition> inputFormatDefinitionsFromConf = inputFormatDefinitionsFromConf(conf);
+    setClassDefinitions(conf, ifs);
+    List<ClassDefinition> inputFormatDefinitionsFromConf = classDefinitionsFromConf(conf);
     assertEquals(sortIFs(ifs), sortIFs(inputFormatDefinitionsFromConf));
 
-    List<InputSpec> inputSpecs = asList(
-        new InputSpec("0", "parquet-inputformat", "mapred.input.dir=/foo/bar/1"),
-        new InputSpec("1", "text-inputformat", "mapred.input.dir=/foo/bar/2")
+    List<Spec> inputSpecs = asList(
+        new Spec("0", "parquet-inputformat", "mapred.input.dir=/foo/bar/1"),
+        new Spec("1", "text-inputformat", "mapred.input.dir=/foo/bar/2")
         );
     setInputSpecs(conf, inputSpecs);
-    List<InputSpec> inputSpecsFromConf = inputSpecsFromConf(conf);
+    List<Spec> inputSpecsFromConf = inputSpecsFromConf(conf);
     assertEquals(sortISs(inputSpecs), sortISs(inputSpecsFromConf));
   }
 
-  private List<InputSpec> sortISs(List<InputSpec> iss) {
-    Collections.sort(iss, new Comparator<InputSpec>() {
+  private List<Spec> sortISs(List<Spec> iss) {
+    Collections.sort(iss, new Comparator<Spec>() {
       @Override
-      public int compare(InputSpec l1, InputSpec l2) {
+      public int compare(Spec l1, Spec l2) {
         return l1.getId().compareTo(l2.getId());
       }
     });
     return iss;
   }
 
-  private List<InputFormatDefinition> sortIFs(List<InputFormatDefinition> ifs) {
-    Collections.sort(ifs, new Comparator<InputFormatDefinition>() {
+  private List<ClassDefinition> sortIFs(List<ClassDefinition> ifs) {
+    Collections.sort(ifs, new Comparator<ClassDefinition>() {
       @Override
-      public int compare(InputFormatDefinition l1, InputFormatDefinition l2) {
+      public int compare(ClassDefinition l1, ClassDefinition l2) {
         return l1.getName().compareTo(l2.getName());
       }
     });

@@ -5,14 +5,19 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.mapred.InputFormat;
 import org.apache.hadoop.mapred.InputSplit;
 import org.apache.hadoop.mapred.JobConf;
+import org.apache.hadoop.mapred.OutputFormat;
 import org.apache.hadoop.mapred.RecordReader;
+import org.apache.hadoop.mapred.RecordWriter;
 import org.apache.hadoop.mapred.Reporter;
+import org.apache.hadoop.util.Progressable;
 
 import com.twitter.isolated.hadoop.ContextManager;
-import com.twitter.isolated.hadoop.InputSpec;
+import com.twitter.isolated.hadoop.Spec;
 
 public class MapredContextManager extends ContextManager {
 
@@ -22,16 +27,18 @@ public class MapredContextManager extends ContextManager {
 
   // methods that make sure delegated calls are executed in the right context
 
+  // input format
+
   public InputSplit[] getSplits(final int numSplits) throws IOException {
     List<IsolatedInputSplit> result = new ArrayList<IsolatedInputSplit>();
-    for (final InputSpec inputSpec : super.getInputSpecs()) {
+    for (final Spec inputSpec : super.getInputSpecs()) {
       result.addAll(callInContext(inputSpec, new MapredContextualCall<List<IsolatedInputSplit>>() {
         @Override
         public List<IsolatedInputSplit> call(JobConf contextualConf) throws IOException, InterruptedException {
-          InputFormat<?, ?> inputFormat = newInputFormat(contextualConf, inputSpec, InputFormat.class);
+          InputFormat<?, ?> inputFormat = newInstanceFromSpec(contextualConf, spec, InputFormat.class);
           List<IsolatedInputSplit> finalSplits = new ArrayList<IsolatedInputSplit>();
           for (InputSplit inputSplit : inputFormat.getSplits(contextualConf, numSplits)) {
-            finalSplits.add(new IsolatedInputSplit(inputSpec.getId(), inputSplit, new JobConf(conf)));
+            finalSplits.add(new IsolatedInputSplit(spec.getId(), inputSplit, new JobConf(conf)));
           }
           return finalSplits;
         }
@@ -42,15 +49,47 @@ public class MapredContextManager extends ContextManager {
 
   public <K, V> RecordReader<K, V> getRecordReader(InputSplit split, final Reporter reporter) throws IOException {
     final IsolatedInputSplit isolatedSplit = (IsolatedInputSplit)split;
-    final InputSpec inputSpec = getInputSpec(isolatedSplit.getInputSpecID());
+    final Spec inputSpec = getInputSpec(isolatedSplit.getInputSpecID());
     return callInContext(inputSpec, new MapredContextualCall<RecordReader<K, V>>() {
       public RecordReader<K, V> call(JobConf contextualConf) throws IOException, InterruptedException {
         @SuppressWarnings("unchecked") // wishful thinking
-        InputFormat<K, V> inputFormat = newInputFormat(contextualConf, inputSpec, InputFormat.class);
+        InputFormat<K, V> inputFormat = newInstanceFromSpec(contextualConf, spec, InputFormat.class);
         return inputFormat.getRecordReader(isolatedSplit.getDelegate(), contextualConf, reporter);
       }
     });
   }
+
+
+  // output format
+
+  public <K, V> void checkOutputSpecs(final FileSystem ignored) throws IOException {
+    Path path = new Path("target/testData/TestIsolatedInputFormat/out");
+    FileSystem fs = path.getFileSystem(conf);
+    System.out.println("before checkOutputSpecs: " + fs.listStatus(path));
+    callInContext(getOutputSpec(), new MapredContextualRun() {
+      public void run(JobConf contextualConf) throws IOException, InterruptedException {
+        @SuppressWarnings("unchecked") // wishful thinking
+        OutputFormat<K, V> outputFormat = newInstanceFromSpec(contextualConf, spec, OutputFormat.class);
+        outputFormat.checkOutputSpecs(ignored, contextualConf);
+      }
+    });
+    System.out.println("after checkOutputSpecs: " + fs.listStatus(path));
+  }
+
+  public <K, V> RecordWriter<K, V> getRecordWriter(final FileSystem ignored, final String name, final Progressable p) throws IOException {
+    Path path = new Path("target/testData/TestIsolatedInputFormat/out");
+    FileSystem fs = path.getFileSystem(conf);
+    System.out.println("before getRecordWriter: " + fs.listStatus(new Path("target/testData/TestIsolatedInputFormat/out")));
+    return callInContext(getOutputSpec(), new MapredContextualCall<RecordWriter<K, V>>() {
+      public RecordWriter<K, V> call(JobConf contextualConf) throws IOException, InterruptedException {
+        @SuppressWarnings("unchecked") // wishful thinking
+        OutputFormat<K, V> outputFormat = newInstanceFromSpec(contextualConf, spec, OutputFormat.class);
+        return outputFormat.getRecordWriter(ignored, contextualConf, name, p);
+      }
+    });
+  }
+
+  // MapRed specific context management
 
   private static abstract class MapredContextualCall<T> extends ContextualCall<T> {
 
@@ -67,4 +106,17 @@ public class MapredContextManager extends ContextManager {
     }
 
   }
+
+  private static abstract class MapredContextualRun extends MapredContextualCall<Void> {
+
+    @Override
+    final public Void call(JobConf contextualConf) throws IOException, InterruptedException {
+      run(contextualConf);
+      return null;
+    }
+
+    abstract public void run(JobConf contextualConf) throws IOException, InterruptedException;
+
+  }
+
 }
