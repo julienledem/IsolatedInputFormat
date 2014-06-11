@@ -76,34 +76,67 @@ public class ContextManager {
     lookup(classDefByName, outputSpec.getClassDefinition()); // validate conf
   }
 
+  /**
+   * @return the configured input specs
+   */
   public Collection<Spec> getInputSpecs() {
     return specByName.values();
   }
 
+  /**
+   * @param id the id of the spec
+   * @return the corresponding spec
+   */
   public Spec getInputSpec(String id) {
     return lookup(specByName, id);
   }
 
+  /**
+   * @return the configured output spec
+   */
   public Spec getOutputSpec() {
     return outputSpec;
   }
 
+  /**
+   * A task to be executed in the context of a Spec (Library + conf)
+   *
+   * @author Julien Le Dem
+   *
+   * @param <T> the returned type
+   */
   public static abstract class ContextualCall<T> {
     private Configuration afterConf;
     public Spec spec;
 
     /**
-     * to detect modifications to conf.
+     * To detect modifications to conf.
+     * When an implementation modifies or wraps a conf, this should be the actual
+     * object passed to the underlying implementation
      * @param conf the modified conf if not the original contextualConf
      */
     protected void setAfterConfiguration(Configuration conf) {
       this.afterConf = conf;
     }
 
+    /**
+     * will be called in the context of a conf and a Thread Context ClassLoader
+     * @param contextualConf the conf resulting of the contextual overlay on the base conf
+     * @return the result of the call
+     * @throws IOException
+     * @throws InterruptedException
+     */
     public abstract T call(Configuration contextualConf) throws IOException, InterruptedException;
 
   }
 
+  /**
+   * Will call and return the result of the ContextualCall in the context defined by the spec
+   * @param specId the id of the spec defining the context
+   * @param callable the task to call
+   * @return the result of the call
+   * @throws IOException
+   */
   public <T> T callInContext(String specId, ContextualCall<T> callable) throws IOException {
     return callInContext(getInputSpec(specId), callable);
   }
@@ -111,7 +144,7 @@ public class ContextManager {
   /**
    * guarantees that the delegated calls are done in the right context:
    *  - classloader to the proper lib
-   *  - configuration from the proper inputSpec and InputFormat
+   *  - configuration from the proper Spec and ClassDefinition
    *  - configuration modifications are propagated in isolation
    * @param callable what to do
    * @return what callable returns
@@ -163,6 +196,14 @@ public class ContextManager {
     }
   }
 
+  /**
+   * returns a new instance of the class in the context of the spec
+   * @param specID defines the context
+   * @param name the class name to instantiate
+   * @param clazz the expected parent class
+   * @return a new instance of class name
+   * @throws IOException
+   */
   public <T> T newInstance(String specID, final String name, final Class<T> clazz) throws IOException {
     return callInContext(specID, new ContextualCall<T>() {
       @Override
