@@ -14,6 +14,12 @@ import org.apache.hadoop.fs.Path;
 
 public class IsolatedConf {
 
+  /**
+   * saves the conf in m in the provided conf by prefixing all the keys with the provided key.
+   * @param conf where to save
+   * @param key key prefix for the conf
+   * @param m the conf to save.
+   */
   static void setConf(Configuration conf, String key, Map<String, String> m) {
     for (Entry<String, String> e: m.entrySet()) {
       conf.set(key + ".conf." + e.getKey(), e.getValue());
@@ -85,6 +91,9 @@ public class IsolatedConf {
     List<Library> result = new ArrayList<Library>();
     for (String lib : getEntries(conf, key("library"))) {
       String[] paths = conf.get(key("library", lib, "paths"), "").split(" ");
+      if (paths.length == 0) {
+        throw new IllegalArgumentException("the library " + lib + " has not jars defined");
+      }
       List<Path> jars = new ArrayList<Path>();
       for (String p : paths) {
         if (p.length() > 0) {
@@ -99,11 +108,11 @@ public class IsolatedConf {
   public static void setLibraries(Configuration conf, Collection<Library> libraries) {
     for (Library library : libraries) {
       List<Path> jars = library.getJars();
-      String urlsString = "";
+      StringBuilder urlsString = new StringBuilder();
       for (Path p : jars) {
-        urlsString += p.toString() + " ";
+        urlsString.append(p.toString()).append(" ");
       }
-      conf.set(key("library", library.getName(), "paths"), urlsString);
+      conf.set(key("library", library.getName(), "paths"), urlsString.toString());
     }
   }
 

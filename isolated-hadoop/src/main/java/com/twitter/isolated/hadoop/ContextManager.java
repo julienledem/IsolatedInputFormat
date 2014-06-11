@@ -43,7 +43,7 @@ public class ContextManager {
     }
   }
 
-  private Configuration newConf(final Configuration conf, final Spec inputSpec, final ClassDefinition inputFormatDefinition) {
+  private static Configuration newConf(final Configuration conf, final Spec inputSpec, final ClassDefinition inputFormatDefinition) {
     Configuration newConf = new Configuration(conf);
     applyConf(newConf, inputFormatDefinition.getConf());
     applyConf(newConf, inputSpec.getConf());

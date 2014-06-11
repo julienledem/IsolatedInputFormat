@@ -1,8 +1,8 @@
 An Isolated InputFormat for Hadoop.
 ===================
 
-This InputFormat allows decoupling the format of the data from the actual jobs. It implement isolation from classloader and configuration perspective.
-It is intended as a better MultiInputFormat which allows reading a single input from multiple locations with different inputformats comming from separate isolated class loaders (child first class loading delegation) and configurations.
+This InputFormat allows decoupling the format of the data from the actual jobs. It implements isolation from the classloader and configuration perspective.
+It is intended as a better MultiInputFormat which allows reading a single input from multiple locations with different inputformats coming from separate isolated class loaders (child first class loading delegation) and configurations.
 
 Configuration
 -------------
