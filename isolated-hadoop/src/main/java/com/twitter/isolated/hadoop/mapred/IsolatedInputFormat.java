@@ -11,8 +11,8 @@ import org.apache.hadoop.mapred.Reporter;
 public class IsolatedInputFormat<K, V> implements InputFormat<K, V>{
 
   @Override
-  public InputSplit[] getSplits(JobConf jobConf, final int arg1) throws IOException {
-    return new MapredContextManager(jobConf).getSplits(arg1);
+  public InputSplit[] getSplits(JobConf jobConf, final int numSplits) throws IOException {
+    return new MapredContextManager(jobConf).getSplits(numSplits);
   }
 
   @Override

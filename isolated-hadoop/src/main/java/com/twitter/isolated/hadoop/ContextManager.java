@@ -16,8 +16,17 @@ import java.util.Map;
 import java.util.Map.Entry;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.mapreduce.InputFormat;
+import org.apache.hadoop.mapreduce.OutputFormat;
 import org.apache.hadoop.util.ReflectionUtils;
 
+/**
+ * Manages calling methods of an {@link InputFormat} or {@link OutputFormat} in the context of
+ * a {@link Configuration} and a {@link ClassLoader} based on a {@link Spec}
+ *
+ * @author Julien Le Dem
+ *
+ */
 public class ContextManager {
 
   private static <T> T lookup(Map<String, T> map, String key) {

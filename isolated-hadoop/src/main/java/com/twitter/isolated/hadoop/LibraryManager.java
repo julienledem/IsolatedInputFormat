@@ -21,6 +21,8 @@ import org.apache.hadoop.io.IOUtils;
 
 public class LibraryManager {
 
+  private static final byte[] ZIP_FILE_HEADER = { 80, 75, 3, 4 };
+
   private static URL[] toURLs(List<Path> jars) {
     try {
       URL[] result = new URL[jars.size()];
@@ -65,8 +67,7 @@ public class LibraryManager {
     FSDataInputStream s = fs.open(path);
     s.readFully(header);
     s.close();
-    byte[] expected = { 80, 75, 3, 4 }; // zip file header
-    if (!Arrays.equals(expected, header)) {
+    if (!Arrays.equals(ZIP_FILE_HEADER, header)) {
       throw new RuntimeException("path " + path + " is not a valid jar");
     }
   }
@@ -94,7 +95,15 @@ public class LibraryManager {
       return c;
     }
 
+    /**
+     * Will prevent loading in the Library classes that should only be loaded in
+     * the parent classloader
+     * @param name the class name
+     * @return true if it should not be loaded in this classLoader
+     */
     private boolean apiClass(String name) {
+      // this class verifies that it is loaded only once.
+      // it will fail otherwise
       return name.equals("org.apache.commons.logging.Log");
     }
   }
