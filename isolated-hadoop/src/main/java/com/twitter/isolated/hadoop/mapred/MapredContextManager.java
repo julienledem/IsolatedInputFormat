@@ -10,14 +10,18 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.mapred.InputFormat;
 import org.apache.hadoop.mapred.InputSplit;
 import org.apache.hadoop.mapred.JobConf;
+import org.apache.hadoop.mapred.JobContext;
+import org.apache.hadoop.mapred.OutputCommitter;
 import org.apache.hadoop.mapred.OutputFormat;
 import org.apache.hadoop.mapred.RecordReader;
 import org.apache.hadoop.mapred.RecordWriter;
 import org.apache.hadoop.mapred.Reporter;
+import org.apache.hadoop.mapred.TaskAttemptContext;
 import org.apache.hadoop.util.Progressable;
 
 import com.twitter.isolated.hadoop.ContextManager;
 import com.twitter.isolated.hadoop.Spec;
+import com.twitter.isolated.hadoop.ContextManager.ContextualCall;
 
 public class MapredContextManager extends ContextManager {
 
@@ -77,14 +81,51 @@ public class MapredContextManager extends ContextManager {
   }
 
   public <K, V> RecordWriter<K, V> getRecordWriter(final FileSystem ignored, final String name, final Progressable p) throws IOException {
-    Path path = new Path("target/testData/TestIsolatedInputFormat/out");
-    FileSystem fs = path.getFileSystem(conf);
-    System.out.println("before getRecordWriter: " + fs.listStatus(new Path("target/testData/TestIsolatedInputFormat/out")));
     return callInContext(getOutputSpec(), new MapredContextualCall<RecordWriter<K, V>>() {
       public RecordWriter<K, V> call(JobConf contextualConf) throws IOException, InterruptedException {
         @SuppressWarnings("unchecked") // wishful thinking
         OutputFormat<K, V> outputFormat = newInstanceFromSpec(contextualConf, spec, OutputFormat.class);
         return outputFormat.getRecordWriter(ignored, contextualConf, name, p);
+      }
+    });
+  }
+
+  public void setupTask(final OutputCommitter delegate, TaskAttemptContext context) throws IOException {
+    callInContext(getOutputSpec(),  new TaskContextualRun(context) {
+      public void run(org.apache.hadoop.mapreduce.TaskAttemptContext contextualConf) throws IOException, InterruptedException {
+        delegate.setupTask(contextualConf);
+      }
+    });
+  }
+
+  public void setupJob(final OutputCommitter delegate, JobContext context) throws IOException {
+    callInContext(getOutputSpec(),  new JobContextualRun(context) {
+      public void run(org.apache.hadoop.mapreduce.JobContext contextualConf) throws IOException, InterruptedException {
+        delegate.setupJob(contextualConf);
+      }
+    });
+  }
+
+  public boolean needsTaskCommit(final OutputCommitter delegate, TaskAttemptContext context) throws IOException {
+    return callInContext(getOutputSpec(),  new TaskContextualCall<Boolean>(context) {
+      public Boolean call(org.apache.hadoop.mapreduce.TaskAttemptContext contextualConf) throws IOException, InterruptedException {
+        return delegate.needsTaskCommit(contextualConf);
+      }
+    });
+  }
+
+  public void commitTask(final OutputCommitter delegate, TaskAttemptContext context) throws IOException {
+    callInContext(getOutputSpec(),  new TaskContextualRun(context) {
+      public void run(org.apache.hadoop.mapreduce.TaskAttemptContext contextualConf) throws IOException, InterruptedException {
+        delegate.commitTask(contextualConf);
+      }
+    });
+  }
+
+  public void abortTask(final OutputCommitter delegate, TaskAttemptContext context) throws IOException {
+    callInContext(getOutputSpec(),  new TaskContextualRun(context) {
+      public void run(org.apache.hadoop.mapreduce.TaskAttemptContext contextualConf) throws IOException, InterruptedException {
+        delegate.abortTask(contextualConf);
       }
     });
   }
@@ -97,7 +138,12 @@ public class MapredContextManager extends ContextManager {
 
     @Override
     public final T call(Configuration contextualConf) throws IOException, InterruptedException {
-      JobConf jobConf = new JobConf(contextualConf);
+      JobConf jobConf = new JobConf(contextualConf) {
+        @Override
+        public OutputCommitter getOutputCommitter() {
+          return new IsolatedOutputCommitter<T>(super.getOutputCommitter());
+        }
+      };
       try {
         return call(jobConf);
       } finally {
@@ -119,4 +165,55 @@ public class MapredContextManager extends ContextManager {
 
   }
 
+  private static abstract class JobContextualRun extends MapredContextualRun {
+    private final JobContext context;
+
+    JobContextualRun(JobContext context) {
+      this.context = context;
+    }
+
+    abstract void run(org.apache.hadoop.mapreduce.JobContext context) throws IOException, InterruptedException;
+
+    @Override
+    final public void run(JobConf contextualConf) throws IOException, InterruptedException {
+      org.apache.hadoop.mapreduce.JobContext newContext =
+          new org.apache.hadoop.mapreduce.JobContext(contextualConf, context.getJobID());
+      this.run(newContext);
+      setAfterConfiguration(newContext.getConfiguration());
+    }
+  }
+
+  private static abstract class TaskContextualRun extends TaskContextualCall<Void> {
+
+    TaskContextualRun(TaskAttemptContext context) {
+      super(context);
+    }
+
+    abstract void run(org.apache.hadoop.mapreduce.TaskAttemptContext context) throws IOException, InterruptedException;
+
+    @Override
+    final public Void call(org.apache.hadoop.mapreduce.TaskAttemptContext contextualConf) throws IOException, InterruptedException {
+      this.run(contextualConf);
+      return null;
+    }
+  }
+
+  private static abstract class TaskContextualCall<T> extends MapredContextualCall<T> {
+    private final TaskAttemptContext context;
+
+    TaskContextualCall(TaskAttemptContext context) {
+      this.context = context;
+    }
+
+    abstract T call(org.apache.hadoop.mapreduce.TaskAttemptContext context) throws IOException, InterruptedException;
+
+    @Override
+    final public T call(JobConf contextualConf) throws IOException, InterruptedException {
+      org.apache.hadoop.mapreduce.TaskAttemptContext newContext =
+          new org.apache.hadoop.mapreduce.TaskAttemptContext(contextualConf, context.getTaskAttemptID());
+      T t = this.call(newContext);
+      setAfterConfiguration(newContext.getConfiguration());
+      return t;
+    }
+  }
 }
