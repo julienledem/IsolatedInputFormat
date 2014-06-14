@@ -69,6 +69,9 @@ public class IsolatedConf {
 
   static Spec outputSpecFromConf(Configuration conf) {
     String ofName = conf.get(key("outputspec", "outputformat"));
+    if (ofName == null) {
+      return null;
+    }
     Map<String, String> specConf = getConf(conf, key("outputspec"));
     return new Spec("output", ofName, specConf);
   }

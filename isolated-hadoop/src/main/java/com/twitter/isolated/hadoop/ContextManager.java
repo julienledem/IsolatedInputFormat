@@ -73,7 +73,9 @@ public class ContextManager {
       specByName.put(spec.getId(), spec);
     }
     outputSpec = outputSpecFromConf(conf);
-    lookup(classDefByName, outputSpec.getClassDefinition()); // validate conf
+    if (outputSpec != null) {
+      lookup(classDefByName, outputSpec.getClassDefinition()); // validate conf
+    }
   }
 
   /**
