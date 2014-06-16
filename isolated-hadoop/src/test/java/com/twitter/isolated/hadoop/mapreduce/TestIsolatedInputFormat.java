@@ -102,22 +102,25 @@ public class TestIsolatedInputFormat {
         job.getConfiguration(),
         asList(
             new ClassDefinition("parquet-inputformat", "parquet-lib", "parquet.hadoop.ParquetInputFormat", "parquet.read.support.class=parquet.hadoop.example.GroupReadSupport"),
-            new ClassDefinition("text-inputformat", null, TextInputFormat.class.getName())
+            new ClassDefinition("text-inputformat", null, TextInputFormat.class.getName()),
+            new ClassDefinition("text-outputformat", null, TextOutputFormat.class.getName())
             )
         );
-    IsolatedConf.setInputSpecs(
+    IsolatedConf.setSpecs(
         job.getConfiguration(),
         asList(
             new Spec("0", "parquet-inputformat", "mapred.input.dir=" + in.toUri()),
-            new Spec("1", "text-inputformat", "mapred.input.dir=" + in2.toUri())
+            new Spec("1", "text-inputformat", "mapred.input.dir=" + in2.toUri()),
+            new Spec("output", "text-outputformat", "mapred.output.dir=" + out.toUri())
             )
         );
+    IsolatedConf.setInputSpecs(job.getConfiguration(), "0", "1");
+    IsolatedConf.setOutputSpec(job.getConfiguration(), "output");
 
     job.setInputFormatClass(IsolatedInputFormat.class);
     job.setNumReduceTasks(0);
-    job.setOutputFormatClass(TextOutputFormat.class);
+    job.setOutputFormatClass(IsolatedOutputFormat.class);
     job.setMapperClass(MyMapper.class);
-    TextOutputFormat.setOutputPath(job, out);
 
     job.submit();
     waitForJob(job);
@@ -149,13 +152,14 @@ public class TestIsolatedInputFormat {
             new ClassDefinition("ConfigModifierInputFormat", null, ConfigModifierInputFormat.class.getName())
             )
         );
-    IsolatedConf.setInputSpecs(
+    IsolatedConf.setSpecs(
         job.getConfiguration(),
         asList(
             new Spec("0", "ConfigModifierInputFormat", "my.external.key=1"),
             new Spec("1", "ConfigModifierInputFormat", "my.external.key=2")
             )
         );
+    IsolatedConf.setInputSpecs(job.getConfiguration(), "0", "1");
 
     job.setInputFormatClass(IsolatedInputFormat.class);
     job.setNumReduceTasks(0);

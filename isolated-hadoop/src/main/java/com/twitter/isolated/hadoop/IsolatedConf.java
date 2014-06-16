@@ -1,13 +1,16 @@
 package com.twitter.isolated.hadoop;
 
+import static java.util.Arrays.asList;
+import static java.util.Collections.emptyList;
+
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
-import java.util.Map.Entry;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
@@ -57,23 +60,26 @@ public class IsolatedConf {
     return result;
   }
 
-  static List<Spec> inputSpecsFromConf(Configuration conf) {
+  static List<Spec> specsFromConf(Configuration conf) {
     List<Spec> result = new ArrayList<Spec>();
-    for (String spec : getEntries(conf, key("inputspec"))) {
-      String ifName = conf.get(key("inputspec", spec, "inputformat"));
-      Map<String, String> specConf = getConf(conf, key("inputspec", spec));
+    for (String spec : getEntries(conf, key("spec"))) {
+      String ifName = conf.get(key("spec", spec, "class"));
+      Map<String, String> specConf = getConf(conf, key("spec", spec));
       result.add(new Spec(spec, ifName, specConf));
     }
     return result;
   }
 
-  static Spec outputSpecFromConf(Configuration conf) {
-    String ofName = conf.get(key("outputspec", "outputformat"));
-    if (ofName == null) {
-      return null;
+  static List<String> inputSpecsFromConf(Configuration conf) {
+    String[] strings = conf.getStrings(key("inputspecs"));
+    if (strings == null) {
+      return emptyList();
     }
-    Map<String, String> specConf = getConf(conf, key("outputspec"));
-    return new Spec("output", ofName, specConf);
+    return asList(strings);
+  }
+
+  static String outputSpecFromConf(Configuration conf) {
+    return conf.get(key("outputspec"));
   }
 
   static List<ClassDefinition> classDefinitionsFromConf(Configuration conf) {
@@ -93,8 +99,8 @@ public class IsolatedConf {
     }
     List<Library> result = new ArrayList<Library>();
     for (String lib : getEntries(conf, key("library"))) {
-      String[] paths = conf.get(key("library", lib, "paths"), "").split(" ");
-      if (paths.length == 0) {
+      String[] paths = conf.getStrings(key("library", lib, "paths"), "");
+      if (paths == null || paths.length == 0) {
         throw new IllegalArgumentException("the library " + lib + " has not jars defined");
       }
       List<Path> jars = new ArrayList<Path>();
@@ -111,11 +117,12 @@ public class IsolatedConf {
   public static void setLibraries(Configuration conf, Collection<Library> libraries) {
     for (Library library : libraries) {
       List<Path> jars = library.getJars();
-      StringBuilder urlsString = new StringBuilder();
-      for (Path p : jars) {
-        urlsString.append(p.toString()).append(" ");
+      String[] strings = new String[jars.size()];
+      for (int i = 0; i < strings.length; i++) {
+        strings[i] = jars.get(i).toString();
+
       }
-      conf.set(key("library", library.getName(), "paths"), urlsString.toString());
+      conf.setStrings(key("library", library.getName(), "paths"), strings);
     }
   }
 
@@ -129,16 +136,19 @@ public class IsolatedConf {
     }
   }
 
-  public static void setInputSpecs(Configuration conf, Collection<Spec> inputSpecs) {
-    for (Spec inputSpec : inputSpecs) {
-      conf.set(key("inputspec", inputSpec.getId(), "inputformat"), inputSpec.getClassDefinition());
-      setConf(conf, key("inputspec", inputSpec.getId()), inputSpec.getConf());
+  public static void setSpecs(Configuration conf, Collection<Spec> specs) {
+    for (Spec spec : specs) {
+      conf.set(key("spec", spec.getId(), "class"), spec.getClassDefinition());
+      setConf(conf, key("spec", spec.getId()), spec.getConf());
     }
   }
 
-  public static void setOutputSpec(Configuration conf, Spec outputSpec) {
-    conf.set(key("outputspec", "outputformat"), outputSpec.getClassDefinition());
-    setConf(conf, key("outputspec"), outputSpec.getConf());
+  public static void setInputSpecs(Configuration conf, String... specIds) {
+    conf.setStrings(key("inputspecs"), specIds);
+  }
+
+  public static void setOutputSpec(Configuration conf, String specID) {
+    conf.set(key("outputspec"), specID);
   }
 
   private static Map<String, String> getConf(Configuration conf, String baseKey) {

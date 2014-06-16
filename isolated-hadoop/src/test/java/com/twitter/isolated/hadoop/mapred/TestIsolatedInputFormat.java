@@ -4,6 +4,7 @@ import static com.twitter.isolated.hadoop.IsolatedConf.setClassDefinitions;
 import static com.twitter.isolated.hadoop.IsolatedConf.setInputSpecs;
 import static com.twitter.isolated.hadoop.IsolatedConf.setLibraries;
 import static com.twitter.isolated.hadoop.IsolatedConf.setOutputSpec;
+import static com.twitter.isolated.hadoop.IsolatedConf.setSpecs;
 import static java.lang.Thread.sleep;
 import static java.util.Arrays.asList;
 import static org.junit.Assert.assertEquals;
@@ -13,7 +14,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.URL;
-import java.util.Map.Entry;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataInputStream;
@@ -34,9 +34,8 @@ import org.junit.Before;
 import org.junit.Test;
 
 import com.twitter.isolated.hadoop.ClassDefinition;
-import com.twitter.isolated.hadoop.Spec;
-import com.twitter.isolated.hadoop.IsolatedConf;
 import com.twitter.isolated.hadoop.Library;
+import com.twitter.isolated.hadoop.Spec;
 
 public class TestIsolatedInputFormat {
   private MiniDFSCluster dfsCluster;
@@ -110,17 +109,16 @@ public class TestIsolatedInputFormat {
             new ClassDefinition("text-outputformat", null, TextOutputFormat.class.getName())
             )
         );
-    setInputSpecs(
+    setSpecs(
         jobConf,
         asList(
             new Spec("0", "parquet-inputformat", "mapred.input.dir=" + in.toUri()),
-            new Spec("1", "text-inputformat", "mapred.input.dir=" + in2.toUri())
+            new Spec("1", "text-inputformat", "mapred.input.dir=" + in2.toUri()),
+            new Spec("output", "text-outputformat", "mapred.output.dir=" + out.toUri())
             )
         );
-    setOutputSpec(
-        jobConf,
-        new Spec("output", "text-outputformat", "mapred.output.dir=" + out.toUri())
-        );
+    setInputSpecs(jobConf, "0", "1");
+    setOutputSpec(jobConf, "output");
 
     jobConf.setInputFormat(IsolatedInputFormat.class);
     jobConf.setNumReduceTasks(0);

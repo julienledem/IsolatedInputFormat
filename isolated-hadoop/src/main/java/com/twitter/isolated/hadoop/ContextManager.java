@@ -4,14 +4,17 @@ import static com.twitter.isolated.hadoop.IsolatedConf.classDefinitionsFromConf;
 import static com.twitter.isolated.hadoop.IsolatedConf.inputSpecsFromConf;
 import static com.twitter.isolated.hadoop.IsolatedConf.librariesFromConf;
 import static com.twitter.isolated.hadoop.IsolatedConf.outputSpecFromConf;
-import static com.twitter.isolated.hadoop.IsolatedConf.setInputSpecs;
+import static com.twitter.isolated.hadoop.IsolatedConf.setSpecs;
+import static com.twitter.isolated.hadoop.IsolatedConf.specsFromConf;
 import static com.twitter.isolated.hadoop.LibraryManager.getClassLoader;
 import static java.util.Arrays.asList;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 
@@ -55,6 +58,7 @@ public class ContextManager {
   private Map<String, ClassDefinition> classDefByName = new LinkedHashMap<String, ClassDefinition>();
   private Map<String, Spec> specByName = new LinkedHashMap<String, Spec>();
   private Map<String, ClassLoader> classLoaderByInputFormatName = new LinkedHashMap<String, ClassLoader>();
+  private List<Spec> inputSpecs = new ArrayList<Spec>();
   private Spec outputSpec;
 
   public ContextManager(Configuration conf) {
@@ -68,13 +72,17 @@ public class ContextManager {
       ClassLoader classLoader = getClassLoader(library);
       classLoaderByInputFormatName.put(inputFormatDef.getName(), classLoader);
     }
-    for (Spec spec : inputSpecsFromConf(conf)) {
+    for (Spec spec : specsFromConf(conf)) {
       lookup(classDefByName, spec.getClassDefinition()); // validate conf
       specByName.put(spec.getId(), spec);
     }
-    outputSpec = outputSpecFromConf(conf);
-    if (outputSpec != null) {
-      lookup(classDefByName, outputSpec.getClassDefinition()); // validate conf
+    List<String> inputSpecIDs = inputSpecsFromConf(conf);
+    for (String inputSpecID : inputSpecIDs) {
+      inputSpecs.add(getSpec(inputSpecID));
+    }
+    String outputSpecID = outputSpecFromConf(conf);
+    if (outputSpecID != null) {
+      outputSpec = getSpec(outputSpecID);
     }
   }
 
@@ -82,14 +90,14 @@ public class ContextManager {
    * @return the configured input specs
    */
   public Collection<Spec> getInputSpecs() {
-    return specByName.values();
+    return inputSpecs;
   }
 
   /**
    * @param id the id of the spec
    * @return the corresponding spec
    */
-  public Spec getInputSpec(String id) {
+  public Spec getSpec(String id) {
     return lookup(specByName, id);
   }
 
@@ -140,7 +148,7 @@ public class ContextManager {
    * @throws IOException
    */
   public <T> T callInContext(String specId, ContextualCall<T> callable) throws IOException {
-    return callInContext(getInputSpec(specId), callable);
+    return callInContext(getSpec(specId), callable);
   }
 
   /**
@@ -170,7 +178,7 @@ public class ContextManager {
           spec.getConf().put(e.getKey(), e.getValue());
         }
       }
-      setInputSpecs(conf, asList(spec));
+      setSpecs(conf, asList(spec));
       return result;
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();

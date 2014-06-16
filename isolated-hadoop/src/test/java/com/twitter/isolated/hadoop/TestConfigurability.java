@@ -3,13 +3,18 @@ package com.twitter.isolated.hadoop;
 import static com.twitter.isolated.hadoop.IsolatedConf.classDefinitionsFromConf;
 import static com.twitter.isolated.hadoop.IsolatedConf.inputSpecsFromConf;
 import static com.twitter.isolated.hadoop.IsolatedConf.librariesFromConf;
+import static com.twitter.isolated.hadoop.IsolatedConf.outputSpecFromConf;
 import static com.twitter.isolated.hadoop.IsolatedConf.setClassDefinitions;
 import static com.twitter.isolated.hadoop.IsolatedConf.setInputSpecs;
 import static com.twitter.isolated.hadoop.IsolatedConf.setLibraries;
+import static com.twitter.isolated.hadoop.IsolatedConf.setOutputSpec;
+import static com.twitter.isolated.hadoop.IsolatedConf.setSpecs;
+import static com.twitter.isolated.hadoop.IsolatedConf.specsFromConf;
 import static java.util.Arrays.asList;
 import static org.junit.Assert.assertEquals;
 
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
@@ -19,12 +24,22 @@ import org.apache.hadoop.fs.Path;
 import org.junit.Test;
 
 public class TestConfigurability {
+
+  @Test(expected = IllegalArgumentException.class)
+  public void testBadConf() throws IOException {
+    Configuration conf = new Configuration();
+    List<Library> libs = asList(
+        new Library("hadoop-lib") // empty
+        );
+    setLibraries(conf, libs);
+    librariesFromConf(conf);
+  }
+
   @Test
   public void testConf() throws IOException {
     Configuration conf = new Configuration();
     List<Library> libs = asList(
-        new Library("parquet-lib", new Path("foo")),
-        new Library("hadoop-lib") // empty
+        new Library("parquet-lib", new Path("foo"))
         );
     setLibraries(conf, libs);
     List<Library> librariesFromConf = librariesFromConf(conf);
@@ -38,13 +53,20 @@ public class TestConfigurability {
     List<ClassDefinition> inputFormatDefinitionsFromConf = classDefinitionsFromConf(conf);
     assertEquals(sortIFs(ifs), sortIFs(inputFormatDefinitionsFromConf));
 
-    List<Spec> inputSpecs = asList(
+    List<Spec> specs = asList(
         new Spec("0", "parquet-inputformat", "mapred.input.dir=/foo/bar/1"),
         new Spec("1", "text-inputformat", "mapred.input.dir=/foo/bar/2")
         );
+    setSpecs(conf, specs);
+    List<Spec> specsFromConf = specsFromConf(conf);
+    assertEquals(sortISs(specs), sortISs(specsFromConf));
+
+    String[] inputSpecs = {"a", "b", "c"};
     setInputSpecs(conf, inputSpecs);
-    List<Spec> inputSpecsFromConf = inputSpecsFromConf(conf);
-    assertEquals(sortISs(inputSpecs), sortISs(inputSpecsFromConf));
+    assertEquals(Arrays.asList(inputSpecs), inputSpecsFromConf(conf));
+
+    setOutputSpec(conf, "o");
+    assertEquals("o", outputSpecFromConf(conf));
   }
 
   private List<Spec> sortISs(List<Spec> iss) {

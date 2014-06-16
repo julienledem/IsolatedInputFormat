@@ -21,7 +21,6 @@ import org.apache.hadoop.util.Progressable;
 
 import com.twitter.isolated.hadoop.ContextManager;
 import com.twitter.isolated.hadoop.Spec;
-import com.twitter.isolated.hadoop.ContextManager.ContextualCall;
 
 public class MapredContextManager extends ContextManager {
 
@@ -53,7 +52,7 @@ public class MapredContextManager extends ContextManager {
 
   public <K, V> RecordReader<K, V> getRecordReader(InputSplit split, final Reporter reporter) throws IOException {
     final IsolatedInputSplit isolatedSplit = (IsolatedInputSplit)split;
-    final Spec inputSpec = getInputSpec(isolatedSplit.getInputSpecID());
+    final Spec inputSpec = getSpec(isolatedSplit.getInputSpecID());
     return callInContext(inputSpec, new MapredContextualCall<RecordReader<K, V>>() {
       public RecordReader<K, V> call(JobConf contextualConf) throws IOException, InterruptedException {
         @SuppressWarnings("unchecked") // wishful thinking

@@ -11,7 +11,10 @@ import org.apache.hadoop.io.serializer.SerializationFactory;
 import org.apache.hadoop.mapreduce.InputFormat;
 import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.JobContext;
+import org.apache.hadoop.mapreduce.OutputCommitter;
+import org.apache.hadoop.mapreduce.OutputFormat;
 import org.apache.hadoop.mapreduce.RecordReader;
+import org.apache.hadoop.mapreduce.RecordWriter;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.hadoop.util.ReflectionUtils;
 
@@ -137,6 +140,37 @@ public class MapreduceContextManager extends ContextManager {
         Deserializer<T> deserializer = factory.getDeserializer(splitClass);
         deserializer.open(in);
         return deserializer.deserialize(delegateInstance);
+      }
+    });
+  }
+
+  public void checkOutputSpecs(JobContext context) throws IOException {
+    callInContext(getOutputSpec(), new JobContextualRun(context) {
+      @Override
+      void run(JobContext contextualConf) throws IOException, InterruptedException {
+        OutputFormat<?, ?> outputFormat = newInstanceFromSpec(contextualConf.getConfiguration(), spec, OutputFormat.class);
+        outputFormat.checkOutputSpecs(contextualConf);
+      }
+    });
+  }
+
+  public OutputCommitter getOutputCommitter(TaskAttemptContext context) throws IOException {
+    return callInContext(getOutputSpec(), new TaskContextualCall<OutputCommitter>(context) {
+      @Override
+      OutputCommitter call(TaskAttemptContext contextualConf) throws IOException, InterruptedException {
+        OutputFormat<?, ?> outputFormat = newInstanceFromSpec(contextualConf.getConfiguration(), spec, OutputFormat.class);
+        return outputFormat.getOutputCommitter(contextualConf);
+      }
+    });
+  }
+
+  public <K,V> RecordWriter<K, V> getRecordWriter(TaskAttemptContext context) throws IOException {
+    return callInContext(getOutputSpec(), new TaskContextualCall<RecordWriter<K, V>>(context) {
+      @Override
+      RecordWriter<K, V> call(TaskAttemptContext contextualConf) throws IOException, InterruptedException {
+        @SuppressWarnings("unchecked") // wishful thinking
+        OutputFormat<K, V> outputFormat = newInstanceFromSpec(contextualConf.getConfiguration(), spec, OutputFormat.class);
+        return outputFormat.getRecordWriter(contextualConf);
       }
     });
   }
