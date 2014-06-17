@@ -15,26 +15,26 @@ final class IsolatedOutputCommitter<T> extends OutputCommitter {
 
   @Override
   public void setupTask(TaskAttemptContext context) throws IOException {
-    new MapredContextManager(context.getJobConf()).setupTask(delegate, context);
+    new MapredTaskAttempContextManager(context).setupTask(delegate);
   }
 
   @Override
   public void setupJob(JobContext context) throws IOException {
-    new MapredContextManager(context.getJobConf()).setupJob(delegate, context);
+    new MapredJobContextManager(context).setupJob(delegate);
   }
 
   @Override
   public boolean needsTaskCommit(TaskAttemptContext context) throws IOException {
-    return new MapredContextManager(context.getJobConf()).needsTaskCommit(delegate, context);
+    return new MapredTaskAttempContextManager(context).needsTaskCommit(delegate);
   }
 
   @Override
   public void commitTask(TaskAttemptContext context) throws IOException {
-    new MapredContextManager(context.getJobConf()).commitTask(delegate, context);
+    new MapredTaskAttempContextManager(context).commitTask(delegate);
   }
 
   @Override
   public void abortTask(TaskAttemptContext context) throws IOException {
-    new MapredContextManager(context.getJobConf()).abortTask(delegate, context);
+    new MapredTaskAttempContextManager(context).abortTask(delegate);
   }
 }

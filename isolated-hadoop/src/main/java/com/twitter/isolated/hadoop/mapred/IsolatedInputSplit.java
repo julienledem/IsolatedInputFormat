@@ -27,9 +27,8 @@ public class IsolatedInputSplit implements InputSplit, JobConfigurable {
   @Override
   public void readFields(DataInput input) throws IOException {
     this.inputSpecID = input.readUTF();
-    String name = input.readUTF();
-    this.delegate = new MapredContextManager(configuration).newInstance(inputSpecID, name, InputSplit.class);
-    delegate.readFields(input);
+    String className = input.readUTF();
+    this.delegate = new MapredContextManager(configuration).readSplit(inputSpecID, className, input);
   }
 
   @Override

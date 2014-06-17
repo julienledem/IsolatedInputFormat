@@ -19,16 +19,15 @@ public final class ClassDefinition {
     return map;
   }
 
-  private final String name;
-  private final String libraryName;
+  private final String id;
+  private final String libraryId;
   private final String className;
   private final Map<String, String> conf;
 
-  public ClassDefinition(String name, String libraryName,
-      String className, Map<String, String> conf) {
+  public ClassDefinition(String id, String libraryId, String className, Map<String, String> conf) {
     super();
-    this.name = name;
-    this.libraryName = libraryName;
+    this.id = id;
+    this.libraryId = libraryId;
     this.className = className;
     this.conf = unmodifiableMap(new TreeMap<String, String>(conf));
   }
@@ -38,12 +37,12 @@ public final class ClassDefinition {
     this(name, libraryName, className, toMap(props));
   }
 
-  public String getName() {
-    return name;
+  public String getID() {
+    return id;
   }
 
-  public String getLibraryName() {
-    return libraryName;
+  public String getLibraryID() {
+    return libraryId;
   }
 
   public String getClassName() {
@@ -63,8 +62,8 @@ public final class ClassDefinition {
         * result
         + ((className == null) ? 0 : className.hashCode());
     result = prime * result
-        + ((libraryName == null) ? 0 : libraryName.hashCode());
-    result = prime * result + ((name == null) ? 0 : name.hashCode());
+        + ((libraryId == null) ? 0 : libraryId.hashCode());
+    result = prime * result + ((id == null) ? 0 : id.hashCode());
     return result;
   }
 
@@ -87,23 +86,23 @@ public final class ClassDefinition {
         return false;
     } else if (!className.equals(other.className))
       return false;
-    if (libraryName == null) {
-      if (other.libraryName != null)
+    if (libraryId == null) {
+      if (other.libraryId != null)
         return false;
-    } else if (!libraryName.equals(other.libraryName))
+    } else if (!libraryId.equals(other.libraryId))
       return false;
-    if (name == null) {
-      if (other.name != null)
+    if (id == null) {
+      if (other.id != null)
         return false;
-    } else if (!name.equals(other.name))
+    } else if (!id.equals(other.id))
       return false;
     return true;
   }
 
   @Override
   public String toString() {
-    return "ClassDefinition [name=" + name + ", libraryName="
-        + libraryName + ", className=" + className
+    return "ClassDefinition [id=" + id + ", libraryID="
+        + libraryId + ", className=" + className
         + ", conf=" + conf + "]";
   }
 

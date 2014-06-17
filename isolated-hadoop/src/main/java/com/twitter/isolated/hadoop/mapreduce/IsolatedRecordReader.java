@@ -37,7 +37,7 @@ final class IsolatedRecordReader<K, V> extends RecordReader<K, V> {
   @Override
   public void initialize(InputSplit split, TaskAttemptContext context)
       throws IOException, InterruptedException {
-    new MapreduceContextManager(context).initializeRecordReader(delegate, split, context);
+    new MapreduceTaskAttemptContextManager(context).initializeRecordReader(delegate, split);
   }
 
   @Override

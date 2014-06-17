@@ -14,6 +14,7 @@ import static java.util.Arrays.asList;
 import static org.junit.Assert.assertEquals;
 
 import java.io.IOException;
+import java.io.OutputStreamWriter;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
@@ -37,7 +38,7 @@ public class TestConfigurability {
 
   @Test
   public void testConf() throws IOException {
-    Configuration conf = new Configuration();
+    Configuration conf = new Configuration(false);
     List<Library> libs = asList(
         new Library("parquet-lib", new Path("foo"))
         );
@@ -67,6 +68,7 @@ public class TestConfigurability {
 
     setOutputSpec(conf, "o");
     assertEquals("o", outputSpecFromConf(conf));
+
   }
 
   private List<Spec> sortISs(List<Spec> iss) {
@@ -83,7 +85,7 @@ public class TestConfigurability {
     Collections.sort(ifs, new Comparator<ClassDefinition>() {
       @Override
       public int compare(ClassDefinition l1, ClassDefinition l2) {
-        return l1.getName().compareTo(l2.getName());
+        return l1.getID().compareTo(l2.getID());
       }
     });
     return ifs;
@@ -93,7 +95,7 @@ public class TestConfigurability {
     Collections.sort(libs, new Comparator<Library>() {
       @Override
       public int compare(Library l1, Library l2) {
-        return l1.getName().compareTo(l2.getName());
+        return l1.getID().compareTo(l2.getID());
       }
     });
     return libs;

@@ -4,13 +4,13 @@ import java.util.Map;
 
 public final class Spec {
   private final String id;
-  private final String classDefinition;
+  private final String classDefinitionID;
   private final Map<String, String> conf;
 
-  public Spec(String id, String classDefinition, Map<String, String> conf) {
+  public Spec(String id, String classDefinitionID, Map<String, String> conf) {
     super();
     this.id = id;
-    this.classDefinition = classDefinition;
+    this.classDefinitionID = classDefinitionID;
     this.conf = conf;
   }
 
@@ -18,8 +18,8 @@ public final class Spec {
     this(id, classDefinition, ClassDefinition.toMap(props));
   }
 
-  public String getClassDefinition() {
-    return classDefinition;
+  public String getClassDefinitionID() {
+    return classDefinitionID;
   }
 
   public Map<String, String> getConf() {
@@ -37,7 +37,7 @@ public final class Spec {
     result = prime * result + ((conf == null) ? 0 : conf.hashCode());
     result = prime * result + ((id == null) ? 0 : id.hashCode());
     result = prime * result
-        + ((classDefinition == null) ? 0 : classDefinition.hashCode());
+        + ((classDefinitionID == null) ? 0 : classDefinitionID.hashCode());
     return result;
   }
 
@@ -60,17 +60,17 @@ public final class Spec {
         return false;
     } else if (!id.equals(other.id))
       return false;
-    if (classDefinition == null) {
-      if (other.classDefinition != null)
+    if (classDefinitionID == null) {
+      if (other.classDefinitionID != null)
         return false;
-    } else if (!classDefinition.equals(other.classDefinition))
+    } else if (!classDefinitionID.equals(other.classDefinitionID))
       return false;
     return true;
   }
 
   @Override
   public String toString() {
-    return "Spec [id=" + id + ", classDefinition=" + classDefinition
+    return "Spec [id=" + id + ", classDefinitionID=" + classDefinitionID
         + ", conf=" + conf + "]";
   }
 

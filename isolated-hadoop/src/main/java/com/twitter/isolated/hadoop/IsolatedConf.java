@@ -17,6 +17,16 @@ import org.apache.hadoop.fs.Path;
 
 public class IsolatedConf {
 
+  private static final String KEY_PREFIX = "com.twitter.isolated";
+  private static final String PATHS = "paths";
+  private static final String NAME = "name";
+  private static final String LIBRARY = "library";
+  private static final String CLASS = "class";
+  private static final String CONF = "conf";
+  private static final String SPEC = "spec";
+  private static final String INPUTSPECS = "inputspecs";
+  private static final String OUTPUTSPEC = "outputspec";
+
   /**
    * saves the conf in m in the provided conf by prefixing all the keys with the provided key.
    * @param conf where to save
@@ -25,12 +35,12 @@ public class IsolatedConf {
    */
   static void setConf(Configuration conf, String key, Map<String, String> m) {
     for (Entry<String, String> e: m.entrySet()) {
-      conf.set(key + ".conf." + e.getKey(), e.getValue());
+      conf.set(key + "." + CONF + "." + e.getKey(), e.getValue());
     }
   }
 
   static String key(String... values) {
-    StringBuilder sb = new StringBuilder("com.twitter.isolated");
+    StringBuilder sb = new StringBuilder(KEY_PREFIX);
     for (String value : values) {
       sb.append(".").append(value);
     }
@@ -62,16 +72,16 @@ public class IsolatedConf {
 
   static List<Spec> specsFromConf(Configuration conf) {
     List<Spec> result = new ArrayList<Spec>();
-    for (String spec : getEntries(conf, key("spec"))) {
-      String ifName = conf.get(key("spec", spec, "class"));
-      Map<String, String> specConf = getConf(conf, key("spec", spec));
+    for (String spec : getEntries(conf, key(SPEC))) {
+      String ifName = conf.get(key(SPEC, spec, CLASS));
+      Map<String, String> specConf = getConf(conf, key(SPEC, spec));
       result.add(new Spec(spec, ifName, specConf));
     }
     return result;
   }
 
   static List<String> inputSpecsFromConf(Configuration conf) {
-    String[] strings = conf.getStrings(key("inputspecs"));
+    String[] strings = conf.getStrings(key(INPUTSPECS));
     if (strings == null) {
       return emptyList();
     }
@@ -79,15 +89,15 @@ public class IsolatedConf {
   }
 
   static String outputSpecFromConf(Configuration conf) {
-    return conf.get(key("outputspec"));
+    return conf.get(key(OUTPUTSPEC));
   }
 
   static List<ClassDefinition> classDefinitionsFromConf(Configuration conf) {
     List<ClassDefinition> result = new ArrayList<ClassDefinition>();
-    for (String inputformat : getEntries(conf, key("class"))) {
-      String className = conf.get(key("class", inputformat, "name"));
-      String lib = conf.get(key("class", inputformat, "library"));
-      Map<String, String> ifConf = getConf(conf, key("class", inputformat));
+    for (String inputformat : getEntries(conf, key(CLASS))) {
+      String className = conf.get(key(CLASS, inputformat, NAME));
+      String lib = conf.get(key(CLASS, inputformat, LIBRARY));
+      Map<String, String> ifConf = getConf(conf, key(CLASS, inputformat));
       result.add(new ClassDefinition(inputformat, lib, className, ifConf));
     }
     return result;
@@ -98,8 +108,8 @@ public class IsolatedConf {
       throw new NullPointerException("conf");
     }
     List<Library> result = new ArrayList<Library>();
-    for (String lib : getEntries(conf, key("library"))) {
-      String[] paths = conf.getStrings(key("library", lib, "paths"), "");
+    for (String lib : getEntries(conf, key(LIBRARY))) {
+      String[] paths = conf.getStrings(key(LIBRARY, lib, PATHS), "");
       if (paths == null || paths.length == 0) {
         throw new IllegalArgumentException("the library " + lib + " has not jars defined");
       }
@@ -122,39 +132,39 @@ public class IsolatedConf {
         strings[i] = jars.get(i).toString();
 
       }
-      conf.setStrings(key("library", library.getName(), "paths"), strings);
+      conf.setStrings(key(LIBRARY, library.getID(), PATHS), strings);
     }
   }
 
   public static void setClassDefinitions(Configuration conf, Collection<ClassDefinition> inputFormats) {
     for (ClassDefinition ifDef : inputFormats) {
-      conf.set(key("class", ifDef.getName(), "name"), ifDef.getClassName());
-      if (ifDef.getLibraryName() != null) {
-        conf.set(key("class", ifDef.getName(), "library"), ifDef.getLibraryName());
+      conf.set(key(CLASS, ifDef.getID(), NAME), ifDef.getClassName());
+      if (ifDef.getLibraryID() != null) {
+        conf.set(key(CLASS, ifDef.getID(), LIBRARY), ifDef.getLibraryID());
       }
-      setConf(conf, key("class", ifDef.getName()), ifDef.getConf());
+      setConf(conf, key(CLASS, ifDef.getID()), ifDef.getConf());
     }
   }
 
   public static void setSpecs(Configuration conf, Collection<Spec> specs) {
     for (Spec spec : specs) {
-      conf.set(key("spec", spec.getId(), "class"), spec.getClassDefinition());
-      setConf(conf, key("spec", spec.getId()), spec.getConf());
+      conf.set(key(SPEC, spec.getId(), CLASS), spec.getClassDefinitionID());
+      setConf(conf, key(SPEC, spec.getId()), spec.getConf());
     }
   }
 
   public static void setInputSpecs(Configuration conf, String... specIds) {
-    conf.setStrings(key("inputspecs"), specIds);
+    conf.setStrings(key(INPUTSPECS), specIds);
   }
 
   public static void setOutputSpec(Configuration conf, String specID) {
-    conf.set(key("outputspec"), specID);
+    conf.set(key(OUTPUTSPEC), specID);
   }
 
   private static Map<String, String> getConf(Configuration conf, String baseKey) {
     Map<String, String> result = new TreeMap<String, String>();
-    for (String key : getEntriesFull(conf, baseKey + ".conf")) {
-      result.put(key, conf.get(baseKey + ".conf." + key));
+    for (String key : getEntriesFull(conf, baseKey + "." + CONF)) {
+      result.put(key, conf.get(baseKey + "." + CONF + "." + key));
     }
     return result;
   }

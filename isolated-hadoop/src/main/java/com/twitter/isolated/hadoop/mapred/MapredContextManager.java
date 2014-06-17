@@ -1,28 +1,25 @@
 package com.twitter.isolated.hadoop.mapred;
 
+import java.io.DataInput;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.mapred.InputFormat;
 import org.apache.hadoop.mapred.InputSplit;
 import org.apache.hadoop.mapred.JobConf;
-import org.apache.hadoop.mapred.JobContext;
 import org.apache.hadoop.mapred.OutputCommitter;
 import org.apache.hadoop.mapred.OutputFormat;
 import org.apache.hadoop.mapred.RecordReader;
 import org.apache.hadoop.mapred.RecordWriter;
 import org.apache.hadoop.mapred.Reporter;
-import org.apache.hadoop.mapred.TaskAttemptContext;
 import org.apache.hadoop.util.Progressable;
 
 import com.twitter.isolated.hadoop.ContextManager;
 import com.twitter.isolated.hadoop.Spec;
 
-public class MapredContextManager extends ContextManager {
+class MapredContextManager extends ContextManager {
 
   MapredContextManager(JobConf conf) {
     super(conf);
@@ -32,16 +29,16 @@ public class MapredContextManager extends ContextManager {
 
   // input format
 
-  public InputSplit[] getSplits(final int numSplits) throws IOException {
+  InputSplit[] getSplits(final int numSplits) throws IOException {
     List<IsolatedInputSplit> result = new ArrayList<IsolatedInputSplit>();
     for (final Spec inputSpec : super.getInputSpecs()) {
       result.addAll(callInContext(inputSpec, new MapredContextualCall<List<IsolatedInputSplit>>() {
         @Override
-        public List<IsolatedInputSplit> call(JobConf contextualConf) throws IOException, InterruptedException {
-          InputFormat<?, ?> inputFormat = newInstanceFromSpec(contextualConf, spec, InputFormat.class);
+        public List<IsolatedInputSplit> call(MapredCallContext context) throws IOException, InterruptedException {
+          InputFormat<?, ?> inputFormat = context.newInstanceFromSpec(InputFormat.class);
           List<IsolatedInputSplit> finalSplits = new ArrayList<IsolatedInputSplit>();
-          for (InputSplit inputSplit : inputFormat.getSplits(contextualConf, numSplits)) {
-            finalSplits.add(new IsolatedInputSplit(spec.getId(), inputSplit, new JobConf(conf)));
+          for (InputSplit inputSplit : inputFormat.getSplits(context.localJobConf, numSplits)) {
+            finalSplits.add(new IsolatedInputSplit(context.spec.getId(), inputSplit, new JobConf(globalConf)));
           }
           return finalSplits;
         }
@@ -50,14 +47,14 @@ public class MapredContextManager extends ContextManager {
     return result.toArray(new InputSplit[result.size()]);
   }
 
-  public <K, V> RecordReader<K, V> getRecordReader(InputSplit split, final Reporter reporter) throws IOException {
+  <K, V> RecordReader<K, V> getRecordReader(InputSplit split, final Reporter reporter) throws IOException {
     final IsolatedInputSplit isolatedSplit = (IsolatedInputSplit)split;
     final Spec inputSpec = getSpec(isolatedSplit.getInputSpecID());
     return callInContext(inputSpec, new MapredContextualCall<RecordReader<K, V>>() {
-      public RecordReader<K, V> call(JobConf contextualConf) throws IOException, InterruptedException {
+      public RecordReader<K, V> call(MapredCallContext context) throws IOException, InterruptedException {
         @SuppressWarnings("unchecked") // wishful thinking
-        InputFormat<K, V> inputFormat = newInstanceFromSpec(contextualConf, spec, InputFormat.class);
-        return inputFormat.getRecordReader(isolatedSplit.getDelegate(), contextualConf, reporter);
+        InputFormat<K, V> inputFormat = context.newInstanceFromSpec(InputFormat.class);
+        return inputFormat.getRecordReader(isolatedSplit.getDelegate(), context.localJobConf, reporter);
       }
     });
   }
@@ -65,154 +62,76 @@ public class MapredContextManager extends ContextManager {
 
   // output format
 
-  public <K, V> void checkOutputSpecs(final FileSystem ignored) throws IOException {
-    Path path = new Path("target/testData/TestIsolatedInputFormat/out");
-    FileSystem fs = path.getFileSystem(conf);
-    System.out.println("before checkOutputSpecs: " + fs.listStatus(path));
+  <K, V> void checkOutputSpecs(final FileSystem ignored) throws IOException {
     callInContext(getOutputSpec(), new MapredContextualRun() {
-      public void run(JobConf contextualConf) throws IOException, InterruptedException {
+      public void run(MapredCallContext context) throws IOException, InterruptedException {
         @SuppressWarnings("unchecked") // wishful thinking
-        OutputFormat<K, V> outputFormat = newInstanceFromSpec(contextualConf, spec, OutputFormat.class);
-        outputFormat.checkOutputSpecs(ignored, contextualConf);
+        OutputFormat<K, V> outputFormat = context.newInstanceFromSpec(OutputFormat.class);
+        outputFormat.checkOutputSpecs(ignored, context.localJobConf);
       }
     });
-    System.out.println("after checkOutputSpecs: " + fs.listStatus(path));
   }
 
-  public <K, V> RecordWriter<K, V> getRecordWriter(final FileSystem ignored, final String name, final Progressable p) throws IOException {
+  <K, V> RecordWriter<K, V> getRecordWriter(final FileSystem ignored, final String name, final Progressable p) throws IOException {
     return callInContext(getOutputSpec(), new MapredContextualCall<RecordWriter<K, V>>() {
-      public RecordWriter<K, V> call(JobConf contextualConf) throws IOException, InterruptedException {
+      public RecordWriter<K, V> call(MapredCallContext ctxt) throws IOException, InterruptedException {
         @SuppressWarnings("unchecked") // wishful thinking
-        OutputFormat<K, V> outputFormat = newInstanceFromSpec(contextualConf, spec, OutputFormat.class);
-        return outputFormat.getRecordWriter(ignored, contextualConf, name, p);
+        OutputFormat<K, V> outputFormat = ctxt.newInstanceFromSpec(OutputFormat.class);
+        return outputFormat.getRecordWriter(ignored, ctxt.localJobConf, name, p);
       }
     });
   }
 
-  public void setupTask(final OutputCommitter delegate, TaskAttemptContext context) throws IOException {
-    callInContext(getOutputSpec(),  new TaskContextualRun(context) {
-      public void run(org.apache.hadoop.mapreduce.TaskAttemptContext contextualConf) throws IOException, InterruptedException {
-        delegate.setupTask(contextualConf);
+  InputSplit readSplit(String inputSpecID, final String className, final DataInput input) throws IOException {
+    return callInContext(inputSpecID, new ContextualCall<InputSplit>() {
+      @Override
+      public InputSplit call(CallContext ctxt) throws IOException, InterruptedException {
+        InputSplit delegate = ctxt.newInstance(className, InputSplit.class);
+        delegate.readFields(input);
+        return delegate;
       }
     });
   }
-
-  public void setupJob(final OutputCommitter delegate, JobContext context) throws IOException {
-    callInContext(getOutputSpec(),  new JobContextualRun(context) {
-      public void run(org.apache.hadoop.mapreduce.JobContext contextualConf) throws IOException, InterruptedException {
-        delegate.setupJob(contextualConf);
-      }
-    });
-  }
-
-  public boolean needsTaskCommit(final OutputCommitter delegate, TaskAttemptContext context) throws IOException {
-    return callInContext(getOutputSpec(),  new TaskContextualCall<Boolean>(context) {
-      public Boolean call(org.apache.hadoop.mapreduce.TaskAttemptContext contextualConf) throws IOException, InterruptedException {
-        return delegate.needsTaskCommit(contextualConf);
-      }
-    });
-  }
-
-  public void commitTask(final OutputCommitter delegate, TaskAttemptContext context) throws IOException {
-    callInContext(getOutputSpec(),  new TaskContextualRun(context) {
-      public void run(org.apache.hadoop.mapreduce.TaskAttemptContext contextualConf) throws IOException, InterruptedException {
-        delegate.commitTask(contextualConf);
-      }
-    });
-  }
-
-  public void abortTask(final OutputCommitter delegate, TaskAttemptContext context) throws IOException {
-    callInContext(getOutputSpec(),  new TaskContextualRun(context) {
-      public void run(org.apache.hadoop.mapreduce.TaskAttemptContext contextualConf) throws IOException, InterruptedException {
-        delegate.abortTask(contextualConf);
-      }
-    });
-  }
-
   // MapRed specific context management
 
-  private static abstract class MapredContextualCall<T> extends ContextualCall<T> {
+  static class MapredCallContext extends CallContext {
 
-    abstract public T call(JobConf contextualConf) throws IOException, InterruptedException;
+    final JobConf localJobConf;
+
+    MapredCallContext(CallContext ctxt, JobConf localJobConf) {
+      super(ctxt, localJobConf);
+      this.localJobConf = localJobConf;
+    }
+
+  }
+
+  static abstract class MapredContextualCall<T> extends ContextualCall<T> {
+
+    abstract T call(MapredCallContext ctxt) throws IOException, InterruptedException;
 
     @Override
-    public final T call(Configuration contextualConf) throws IOException, InterruptedException {
-      JobConf jobConf = new JobConf(contextualConf) {
+    public final T call(CallContext ctxt) throws IOException, InterruptedException {
+      JobConf localJobConf = new JobConf(ctxt.localConf()) {
         @Override
         public OutputCommitter getOutputCommitter() {
           return new IsolatedOutputCommitter<T>(super.getOutputCommitter());
         }
       };
-      try {
-        return call(jobConf);
-      } finally {
-        setAfterConfiguration(jobConf);
-      }
+      return call(new MapredCallContext(ctxt, localJobConf));
     }
 
   }
 
-  private static abstract class MapredContextualRun extends MapredContextualCall<Void> {
+  static abstract class MapredContextualRun extends MapredContextualCall<Void> {
 
     @Override
-    final public Void call(JobConf contextualConf) throws IOException, InterruptedException {
-      run(contextualConf);
+    final public Void call(MapredCallContext ctxt) throws IOException, InterruptedException {
+      run(ctxt);
       return null;
     }
 
-    abstract public void run(JobConf contextualConf) throws IOException, InterruptedException;
+    abstract void run(MapredCallContext ctxt) throws IOException, InterruptedException;
 
   }
 
-  private static abstract class JobContextualRun extends MapredContextualRun {
-    private final JobContext context;
-
-    JobContextualRun(JobContext context) {
-      this.context = context;
-    }
-
-    abstract void run(org.apache.hadoop.mapreduce.JobContext context) throws IOException, InterruptedException;
-
-    @Override
-    final public void run(JobConf contextualConf) throws IOException, InterruptedException {
-      org.apache.hadoop.mapreduce.JobContext newContext =
-          new org.apache.hadoop.mapreduce.JobContext(contextualConf, context.getJobID());
-      this.run(newContext);
-      setAfterConfiguration(newContext.getConfiguration());
-    }
-  }
-
-  private static abstract class TaskContextualRun extends TaskContextualCall<Void> {
-
-    TaskContextualRun(TaskAttemptContext context) {
-      super(context);
-    }
-
-    abstract void run(org.apache.hadoop.mapreduce.TaskAttemptContext context) throws IOException, InterruptedException;
-
-    @Override
-    final public Void call(org.apache.hadoop.mapreduce.TaskAttemptContext contextualConf) throws IOException, InterruptedException {
-      this.run(contextualConf);
-      return null;
-    }
-  }
-
-  private static abstract class TaskContextualCall<T> extends MapredContextualCall<T> {
-    private final TaskAttemptContext context;
-
-    TaskContextualCall(TaskAttemptContext context) {
-      this.context = context;
-    }
-
-    abstract T call(org.apache.hadoop.mapreduce.TaskAttemptContext context) throws IOException, InterruptedException;
-
-    @Override
-    final public T call(JobConf contextualConf) throws IOException, InterruptedException {
-      org.apache.hadoop.mapreduce.TaskAttemptContext newContext =
-          new org.apache.hadoop.mapreduce.TaskAttemptContext(contextualConf, context.getTaskAttemptID());
-      T t = this.call(newContext);
-      setAfterConfiguration(newContext.getConfiguration());
-      return t;
-    }
-  }
 }

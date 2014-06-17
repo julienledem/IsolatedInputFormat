@@ -12,6 +12,7 @@ import static java.util.Arrays.asList;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -19,6 +20,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.mapred.InputSplit;
 import org.apache.hadoop.mapreduce.InputFormat;
 import org.apache.hadoop.mapreduce.OutputFormat;
 import org.apache.hadoop.util.ReflectionUtils;
@@ -53,37 +55,37 @@ public class ContextManager {
     return newConf;
   }
 
-  protected Configuration conf;
-  private Map<String, Library> libByName = new HashMap<String, Library>();
-  private Map<String, ClassDefinition> classDefByName = new LinkedHashMap<String, ClassDefinition>();
-  private Map<String, Spec> specByName = new LinkedHashMap<String, Spec>();
-  private Map<String, ClassLoader> classLoaderByInputFormatName = new LinkedHashMap<String, ClassLoader>();
-  private List<Spec> inputSpecs = new ArrayList<Spec>();
-  private Spec outputSpec;
+  protected final Configuration globalConf;
+  private final Map<String, Library> libByName = new HashMap<String, Library>();
+  private final Map<String, ClassDefinition> classDefByName = new LinkedHashMap<String, ClassDefinition>();
+  private final Map<String, Spec> specByName = new LinkedHashMap<String, Spec>();
+  private final Map<String, ClassLoader> classLoaderByInputFormatName = new LinkedHashMap<String, ClassLoader>();
+  private final List<Spec> inputSpecs;
+  private final Spec outputSpec;
 
   public ContextManager(Configuration conf) {
-    this.conf = conf;
+    this.globalConf = conf;
     for (Library library : librariesFromConf(conf)) {
-      libByName.put(library.getName(), library);
+      libByName.put(library.getID(), library);
     }
     for (ClassDefinition inputFormatDef : classDefinitionsFromConf(conf)) {
-      classDefByName.put(inputFormatDef.getName(), inputFormatDef);
-      Library library = inputFormatDef.getLibraryName() == null ? null : lookup(libByName, inputFormatDef.getLibraryName());
+      classDefByName.put(inputFormatDef.getID(), inputFormatDef);
+      Library library = inputFormatDef.getLibraryID() == null ? null : lookup(libByName, inputFormatDef.getLibraryID());
       ClassLoader classLoader = getClassLoader(library);
-      classLoaderByInputFormatName.put(inputFormatDef.getName(), classLoader);
+      classLoaderByInputFormatName.put(inputFormatDef.getID(), classLoader);
     }
     for (Spec spec : specsFromConf(conf)) {
-      lookup(classDefByName, spec.getClassDefinition()); // validate conf
+      lookup(classDefByName, spec.getClassDefinitionID()); // validate conf
       specByName.put(spec.getId(), spec);
     }
+    List<Spec> inputs = new ArrayList<Spec>();
     List<String> inputSpecIDs = inputSpecsFromConf(conf);
     for (String inputSpecID : inputSpecIDs) {
-      inputSpecs.add(getSpec(inputSpecID));
+      inputs.add(getSpec(inputSpecID));
     }
+    inputSpecs = Collections.unmodifiableList(inputs);
     String outputSpecID = outputSpecFromConf(conf);
-    if (outputSpecID != null) {
-      outputSpec = getSpec(outputSpecID);
-    }
+    outputSpec = outputSpecID == null ? null : getSpec(outputSpecID);
   }
 
   /**
@@ -108,6 +110,52 @@ public class ContextManager {
     return outputSpec;
   }
 
+  public static class CallContext {
+
+    private Configuration localConf;
+    public final Spec spec;
+    private final ContextManager contextManager;
+
+    /**
+     * to enable nesting context and propagating conf modifications
+     * @param that the existing context
+     * @param newLocalConf the new conf
+     */
+    public CallContext(CallContext that, Configuration newLocalConf) {
+      this(that.contextManager, that.spec, newLocalConf);
+      that.propagateConfigurationChanges(newLocalConf);
+    }
+
+    private CallContext(ContextManager contextManager, Spec spec, Configuration contextualConf) {
+      this.contextManager = contextManager;
+      this.spec = spec;
+      this.localConf = contextualConf;
+    }
+
+    /**
+     * To detect modifications to conf.
+     * When an implementation modifies or wraps a conf, this should be the actual
+     * object passed to the underlying implementation
+     * @param conf the modified conf if not the original contextualConf
+     */
+    private void propagateConfigurationChanges(Configuration conf) {
+      this.localConf = conf;
+    }
+
+    public <T> T newInstanceFromSpec(Class<T> parentClass) {
+      return contextManager.newInstanceFromSpec(localConf, spec, parentClass);
+    }
+
+    public InputSplit newInstance(String className, Class<InputSplit> parentClass) {
+      return contextManager.newInstance(localConf, className, parentClass);
+    }
+
+    public Configuration localConf() {
+      return localConf;
+    }
+
+  }
+
   /**
    * A task to be executed in the context of a Spec (Library + conf)
    *
@@ -116,27 +164,15 @@ public class ContextManager {
    * @param <T> the returned type
    */
   public static abstract class ContextualCall<T> {
-    private Configuration afterConf;
-    public Spec spec;
-
-    /**
-     * To detect modifications to conf.
-     * When an implementation modifies or wraps a conf, this should be the actual
-     * object passed to the underlying implementation
-     * @param conf the modified conf if not the original contextualConf
-     */
-    protected void setAfterConfiguration(Configuration conf) {
-      this.afterConf = conf;
-    }
 
     /**
      * will be called in the context of a conf and a Thread Context ClassLoader
-     * @param contextualConf the conf resulting of the contextual overlay on the base conf
+     * @param localConf the conf resulting of the contextual overlay on the base conf
      * @return the result of the call
      * @throws IOException
      * @throws InterruptedException
      */
-    public abstract T call(Configuration contextualConf) throws IOException, InterruptedException;
+    public abstract T call(CallContext context) throws IOException, InterruptedException;
 
   }
 
@@ -164,21 +200,19 @@ public class ContextManager {
     Thread currentThread = Thread.currentThread();
     ClassLoader contextClassLoader = currentThread.getContextClassLoader();
     try {
-      ClassDefinition inputFormatDefinition = lookup(classDefByName, spec.getClassDefinition());
-      currentThread.setContextClassLoader(lookup(classLoaderByInputFormatName, spec.getClassDefinition()));
-      Configuration before = newConf(conf, spec, inputFormatDefinition);
-      callable.afterConf = new Configuration(before);
-      callable.spec = spec;
-      T result = callable.call(callable.afterConf);
-      callable.spec = null;
+      ClassDefinition inputFormatDefinition = lookup(classDefByName, spec.getClassDefinitionID());
+      currentThread.setContextClassLoader(lookup(classLoaderByInputFormatName, spec.getClassDefinitionID()));
+      Configuration before = newConf(globalConf, spec, inputFormatDefinition);
+      CallContext context = new CallContext(this, spec, new Configuration(before));
+      T result = callable.call(context);
       // detect changes in the conf and save them
-      for (Entry<String, String> e : callable.afterConf) {
+      for (Entry<String, String> e : context.localConf) {
         String previous = before.getRaw(e.getKey());
         if (previous == null || !previous.equals(e.getValue())) {
           spec.getConf().put(e.getKey(), e.getValue());
         }
       }
-      setSpecs(conf, asList(spec));
+      setSpecs(globalConf, asList(spec));
       return result;
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
@@ -188,39 +222,22 @@ public class ContextManager {
     }
   }
 
-  protected <T> T newInstanceFromSpec(Configuration contextualConf, Spec spec, Class<T> parentClass) {
+  private <T> T newInstanceFromSpec(Configuration contextualConf, Spec spec, Class<T> parentClass) {
     try {
-      ClassDefinition classdef = lookup(classDefByName, spec.getClassDefinition());
+      ClassDefinition classdef = lookup(classDefByName, spec.getClassDefinitionID());
       return newInstance(contextualConf, classdef.getClassName(), parentClass);
     } catch (RuntimeException e) {
       throw new RuntimeException("Can't instantiate class from spec " + spec, e);
     }
   }
 
-  protected <T> T newInstance(Configuration contextualConf, String className, Class<T> parentClass) {
+  private <T> T newInstance(Configuration contextualConf, String className, Class<T> parentClass) {
     try {
       Class<?> clazz = contextualConf.getClassByName(className);
       return parentClass.cast(ReflectionUtils.newInstance(clazz, contextualConf));
     } catch (ClassNotFoundException e) {
       throw new RuntimeException(e);
     }
-  }
-
-  /**
-   * returns a new instance of the class in the context of the spec
-   * @param specID defines the context
-   * @param name the class name to instantiate
-   * @param clazz the expected parent class
-   * @return a new instance of class name
-   * @throws IOException
-   */
-  public <T> T newInstance(String specID, final String name, final Class<T> clazz) throws IOException {
-    return callInContext(specID, new ContextualCall<T>() {
-      @Override
-      public T call(Configuration contextualConf) throws IOException, InterruptedException {
-        return newInstance(contextualConf, name, clazz);
-      }
-    });
   }
 
 }

@@ -13,13 +13,13 @@ public class IsolatedInputFormat<K, V> extends InputFormat<K, V> {
 
   @Override
   public List<InputSplit> getSplits(JobContext context) throws IOException, InterruptedException {
-    return new MapreduceContextManager(context).getSplits(context);
+    return new MapreduceJobContextManager(context).getSplits();
   }
 
   @Override
   public RecordReader<K, V> createRecordReader(InputSplit split, TaskAttemptContext context)
       throws IOException, InterruptedException {
-    return new IsolatedRecordReader<K, V>(new MapreduceContextManager(context).<K, V>createRecordReader(split, context));
+    return new IsolatedRecordReader<K, V>(new MapreduceTaskAttemptContextManager(context).<K, V>createRecordReader(split));
   }
 
 }

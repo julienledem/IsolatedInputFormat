@@ -47,7 +47,7 @@ public class IsolatedInputSplit extends InputSplit implements Writable, Configur
   }
 
   private InputSplit deserialize(InputStream in, String name) throws IOException {
-    return new MapreduceContextManager(configuration).deserializeSplit(in, inputSpecID, name, configuration);
+    return new MapreduceContextManager(configuration).deserializeSplit(in, inputSpecID, name);
   }
 
   @Override

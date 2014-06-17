@@ -13,19 +13,19 @@ public class IsolatedOutputFormat<K, V> extends OutputFormat<K, V> {
   @Override
   public void checkOutputSpecs(JobContext context) throws IOException,
       InterruptedException {
-    new MapreduceContextManager(context).checkOutputSpecs(context);
+    new MapreduceJobContextManager(context).checkOutputSpecs();
   }
 
   @Override
   public OutputCommitter getOutputCommitter(TaskAttemptContext context)
       throws IOException, InterruptedException {
-    return new MapreduceContextManager(context).getOutputCommitter(context);
+    return new MapreduceTaskAttemptContextManager(context).getOutputCommitter();
   }
 
   @Override
   public RecordWriter<K, V> getRecordWriter(TaskAttemptContext context)
       throws IOException, InterruptedException {
-    return new MapreduceContextManager(context).getRecordWriter(context);
+    return new MapreduceTaskAttemptContextManager(context).getRecordWriter();
   }
 
 }

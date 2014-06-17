@@ -10,21 +10,21 @@ import java.util.List;
 import org.apache.hadoop.fs.Path;
 
 public final class Library {
-  private final String name;
+  private final String id;
   private final List<Path> jars;
 
-  public Library(String name, Path... jars) {
-    this(name, asList(jars));
+  public Library(String id, Path... jars) {
+    this(id, asList(jars));
   }
 
-  public Library(String name, Collection<Path> jars) {
+  public Library(String id, Collection<Path> jars) {
     super();
-    this.name = name;
+    this.id = id;
     this.jars = unmodifiableList(new ArrayList<Path>(jars));
   }
 
-  public String getName() {
-    return name;
+  public String getID() {
+    return id;
   }
 
   public List<Path> getJars() {
@@ -36,7 +36,7 @@ public final class Library {
     final int prime = 31;
     int result = 1;
     result = prime * result + ((jars == null) ? 0 : jars.hashCode());
-    result = prime * result + ((name == null) ? 0 : name.hashCode());
+    result = prime * result + ((id == null) ? 0 : id.hashCode());
     return result;
   }
 
@@ -54,17 +54,17 @@ public final class Library {
         return false;
     } else if (!jars.equals(other.jars))
       return false;
-    if (name == null) {
-      if (other.name != null)
+    if (id == null) {
+      if (other.id != null)
         return false;
-    } else if (!name.equals(other.name))
+    } else if (!id.equals(other.id))
       return false;
     return true;
   }
 
   @Override
   public String toString() {
-    return "Library [name=" + name + ", jars=" + jars + "]";
+    return "Library [name=" + id + ", jars=" + jars + "]";
   }
 
 }

@@ -14,43 +14,68 @@ Configuration
 a library is defined by a list of jars on HDFS.
 Each library will create a classloader.
 ```
-com.twitter.isolated.library.{library name}.paths={space delimited list of jar paths on HDFS}
+com.twitter.isolated.library.{library id}.paths={comma delimited list of jar paths on HDFS}
 ```
 example:
 ```
 com.twitter.isolated.library.parquet-lib.paths=hdfs:///libs/parquet-hadoop-bundle-1.4.3.jar
 ```
 
-### InputFormats
-an InputFormat is defined by an InputFormat class name and (optionally) a library name and conf
+### Class definitions
+a Class is defined by a class name and (optionally) a library name and conf
 ```
-com.twitter.isolated.inputformat.{name}.library={library name}
-com.twitter.isolated.inputformat.{name}.class={class name}
-com.twitter.isolated.inputformat.{name}.conf.{key}={value}
+com.twitter.isolated.class.{class definition id}.library={library ID}
+com.twitter.isolated.class.{class definition id}.name={class name}
+com.twitter.isolated.class.{class definition id}.conf.{key}={value}
 ```
 if library is not defined, the current application class loader is used. Otherwise the library class loader is used.
 
 examples:
 ```
-com.twitter.isolated.inputformat.parquet-inputformat.library=parquet-lib
-com.twitter.isolated.inputformat.parquet-inputformat.class=parquet.hadoop.ParquetInputFormat
-com.twitter.isolated.inputformat.parquet-inputformat.conf.parquet.read.support.class=parquet.hadoop.example.GroupReadSupport
+com.twitter.isolated.class.parquet-inputformat.library=parquet-lib
+com.twitter.isolated.class.parquet-inputformat.name=parquet.hadoop.ParquetInputFormat
+com.twitter.isolated.class.parquet-inputformat.conf.parquet.read.support.class=parquet.hadoop.example.GroupReadSupport
 
-com.twitter.isolated.inputformat.text-inputformat.class=org.apache.hadoop.mapreduce.lib.input.TextInputFormat
+com.twitter.isolated.class.text-inputformat.name=org.apache.hadoop.mapreduce.lib.input.TextInputFormat
 ```
 
-### InputSpecs
-an InputSpec is defined by an inputformat and a conf.
+### Specs
+a Spec is defined by a class definition and a conf.
 
 ```
-com.twitter.isolated.inputspec.{id}.inputformat={input format name}
-com.twitter.isolated.inputspec.{id}.conf.{key}={value}
+com.twitter.isolated.spec.{spec id}.class={class definition id}
+com.twitter.isolated.spec.{spec id}.conf.{key}={value}
 ```
 example:
 ```
-com.twitter.isolated.inputspec.0.inputformat=parquet-inputformat
-com.twitter.isolated.inputspec.0.conf.mapred.input.dir=/user/julien/myfile.parquet
+com.twitter.isolated.spec.0.class=parquet-inputformat
+com.twitter.isolated.spec.0.conf.mapred.input.dir=/user/julien/myfile.parquet
 
-com.twitter.isolated.inputspec.1.inputformat=text-inputformat
-com.twitter.isolated.inputspec.1.conf.mapred.input.dir=/user/julien/job_stats_by_day
+com.twitter.isolated.spec.1.class=text-inputformat
+com.twitter.isolated.spec.1.conf.mapred.input.dir=/user/julien/job_stats_by_day
+
+com.twitter.isolated.spec.o.class=text-outputformat
+com.twitter.isolated.spec.o.conf.mapred.output.dir=/user/julien/out
 ```
+
+# Input
+The specs defining the input.
+```
+com.twitter.isolated.inputspecs={comma delimoted list of specs}
+```
+example:
+```
+com.twitter.isolated.inputspecs=0,1
+```
+
+# Output
+The spec defining the output.
+```
+com.twitter.isolated.output={spec id}
+```
+example:
+```
+com.twitter.isolated.outputspec=o
+```
+
+
