@@ -13,8 +13,8 @@
   <version>0.1.0-SNAPSHOT</version>
   <packaging>jar</packaging>
 
-  <name>Isolated InputFormat</name>
-  <description></description>
+  <name>Isolated InputFormat and OutputFormat</name>
+  <description>enables decoupling format implementation from application</description>
 
   <build>
   </build>

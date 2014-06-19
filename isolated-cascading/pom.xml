@@ -14,7 +14,7 @@
   <packaging>jar</packaging>
 
   <name>Isolated Scheme</name>
-  <description></description>
+  <description>decouples cascading jobs from format</description>
 
   <build>
   </build>
@@ -44,5 +44,5 @@
       <version>${hadoop.version}</version>
       <scope>test</scope>
     </dependency>
-</dependencies>
+  </dependencies>
 </project>
