@@ -5,11 +5,11 @@ import java.io.IOException;
 import org.apache.hadoop.mapred.OutputCommitter;
 import org.apache.hadoop.mapred.TaskAttemptContext;
 
-class MapredTaskAttempContextManager extends MapredContextManager {
+class MapredTaskAttemptContextManager extends MapredContextManager {
 
   private final TaskAttemptContext globalTaskContext;
 
-  MapredTaskAttempContextManager(TaskAttemptContext globalTaskContext) {
+  MapredTaskAttemptContextManager(TaskAttemptContext globalTaskContext) {
     super(globalTaskContext.getJobConf());
     this.globalTaskContext = globalTaskContext;
   }
