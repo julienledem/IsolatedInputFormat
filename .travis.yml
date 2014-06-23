@@ -1,0 +1,2 @@
+language: java
+script: umask 0022 && mvn test
