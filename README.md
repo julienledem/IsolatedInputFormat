@@ -61,7 +61,7 @@ com.twitter.isolated.spec.o.conf.mapred.output.dir=/user/julien/out
 # Input
 The specs defining the input.
 ```
-com.twitter.isolated.inputspecs={comma delimoted list of specs}
+com.twitter.isolated.inputspecs={comma delimited list of specs}
 ```
 example:
 ```
